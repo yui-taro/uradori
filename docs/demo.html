@@ -193,6 +193,7 @@ code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
   <div class="tabs" role="tablist" aria-label="シナリオ">
     <button class="tab" role="tab" id="tab-file" aria-selected="true" data-sc="file">古いドキュメント（ファイル）</button>
     <button class="tab" role="tab" id="tab-web" aria-selected="false" data-sc="web">ウェブページの出典</button>
+    <button class="tab" role="tab" id="tab-real" aria-selected="false" data-sc="real">実際のサイト（MDN）</button>
   </div>
 
   <div class="stage">
@@ -310,6 +311,31 @@ code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
       fixClaims: [
         { text: '1回のリクエストで取得できるのは最大50件です（出典: https://docs.example.com/limits の「取得件数」節「最大50件です」）。', verdict: 'ok', hit: 2 },
         { text: 'リクエストは1分あたり60回までです（同ページ「レート制限」節）。', verdict: 'ok', hit: 6 }
+      ]
+    },
+    real: {
+      path: '~/projects/sample-client',
+      question: 'API から 429 が返ってきました。何を意味する？どれくらい待てばいいかも分かる？根拠のページも書いて。',
+      lead: 'MDN の「429 Too Many Requests」のページによると、次のとおりです。',
+      claims: [
+        { text: '429 は、サーバーが過負荷で一時的にリクエストを処理できないことを示します（出典: https://developer.mozilla.org/ja/docs/Web/HTTP/Reference/Status/429）。', verdict: 'ng', hit: 2, quote: 'クライアントが指定時間内にたくさんリクエストを送信しすぎたことを示します' },
+        { text: '待つ時間は Retry-After ヘッダーで示されることがあります（同ページ「新しいリクエストを行う前にどのくらい待つかを示す」）。', verdict: 'ok', hit: 4, quote: '新しいリクエストを行う前にどのくらい待つかを示す' }
+      ],
+      source: {
+        kind: 'web', real: true, name: '429 Too Many Requests - HTTP | MDN', url: 'https://developer.mozilla.org/ja/docs/Web/HTTP/Reference/Status/429',
+        credit: '引用元: MDN Web Docs（CC BY-SA 2.5）',
+        lines: [
+          '## 429 Too Many Requests',
+          'HTTP の 429 Too Many Requests はクライアントエラーレスポンスステータスコードで、クライアントが指定時間内にたくさんリクエストを送信しすぎたことを示します。',
+          'リクエストの速度を落とすようにクライアントに依頼するこの仕組みは、一般に「速度制限」と呼ばれています。',
+          '新しいリクエストを行う前にどのくらい待つかを示す Retry-After ヘッダーをこのレスポンスに含めることができます。'
+        ]
+      },
+      fixRequest: 'ウラ取りの結果、「サーバーが過負荷で一時的にリクエストを処理できない」が MDN の「クライアントが指定時間内にたくさんリクエストを送信しすぎたことを示します」と食い違っています。原文を確かめて訂正してください。',
+      fixLead: 'MDN のページを確かめ直しました。先ほどの説明は誤りでした。',
+      fixClaims: [
+        { text: '429 は、クライアントが指定時間内にリクエストを送りすぎたことを示します（出典: https://developer.mozilla.org/ja/docs/Web/HTTP/Reference/Status/429 の「クライアントが指定時間内にたくさんリクエストを送信しすぎたことを示します」）。', verdict: 'ok', hit: 2, quote: 'クライアントが指定時間内にたくさんリクエストを送信しすぎたことを示します' },
+        { text: '待つ時間は Retry-After ヘッダーで示されることがあります（同ページ「新しいリクエストを行う前にどのくらい待つかを示す」）。', verdict: 'ok', hit: 4, quote: '新しいリクエストを行う前にどのくらい待つかを示す' }
       ]
     }
   };
@@ -473,13 +499,17 @@ code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
         : `<div class="ln${hit ? ' hit' + (c.verdict === 'ok' ? ' okhit' : '') : ''}"><span class="arrow">${hit ? '▶' : ''}</span><span>${esc(text.replace(/^## /, ''))}</span></div>`;
     }
     const head = c.verdict === 'ng' ? '<span class="v ng">✖ 原文と食い違い</span>' : '<span class="v ok">✔ 原文と一致</span>';
-    const frag = encodeURIComponent(s.lines[c.hit - 1].slice(0, 16));
+    const frag = encodeURIComponent(c.quote || s.lines[c.hit - 1].slice(0, 16));
+    const siteLink = s.real
+      ? `<a class="openlink" href="${esc(s.url)}#:~:text=${frag}" target="_blank" rel="noopener">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</a>
+         <p class="foot" style="margin:0">MDN の実際のページが新しいタブで開き、根拠の文までスクロールしてハイライトされます（Chrome・Edge・Safari など）。${esc(s.credit)}</p>`
+      : `<button class="openlink" id="p-site">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</button><div id="p-browser"></div>`;
     pop.innerHTML = `
       <div class="pop-head" id="pop-title">${head}<span class="n">（${popIndex + 1}/${list.length}）</span></div>
       <div><div class="lbl">Claude の主張</div><div class="claim">「${esc(shortClaim(c.text))}」</div></div>
       <div class="srcline"><span class="lbl">${s.kind === 'file' ? '実際のファイル' : '実際のページ'}</span>　${esc(s.name)}</div>
       <div class="excerpt${s.kind === 'web' ? ' web' : ''}">${rows}</div>
-      ${s.kind === 'web' ? `<button class="openlink" id="p-site">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</button><div id="p-browser"></div>` : ''}
+      ${s.kind === 'web' ? siteLink : ''}
       <div class="pop-btns">
         ${c.verdict === 'ng' && phase !== 'done' ? '<button class="pbtn fix" id="p-fix">この主張を訂正させる</button>' : ''}
         <button class="pbtn" id="p-prev" ${popIndex === 0 ? 'disabled' : ''}>← 前</button>
