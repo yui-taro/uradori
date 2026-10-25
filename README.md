@@ -90,6 +90,8 @@ claude --plugin-dir ~/mods/uradori
 
 読み込まれたかは `/plugin` で確認できます（`1 mod active · uradori`）。
 
+入手から動作確認・更新・取り外しまでの詳しい手順は [導入ガイド](https://yui-taro.github.io/uradori/install.html) にあります。
+
 ## デモ（約60秒）
 
 `demo/` に、**ドキュメントが古くなっている**小さなプロジェクトが入っています。

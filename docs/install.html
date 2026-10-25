@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ウラ取り 導入ガイド</title>
+<meta name="description" content="Claude Code の mod「ウラ取り（uradori）」を入手して読み込み、動作を確かめるまでの手順">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: ガイド本編と同じ校正紙の2段組。左に手順名、右に操作。コードは必ずコピーできる */
+:root{
+  --paper:#f6f7f9; --sheet:#ffffff; --ink:#1d2433; --muted:#5d6577; --rule:#dde1e8;
+  --indigo:#2b4a8b; --indigo-soft:#e7edf8; --seal:#c23b2a;
+  --ok:#2f7d4f; --ok-soft:#e3f2e8; --warn:#a96a00; --warn-soft:#fbf0d9;
+  --term-bg:#151a24; --term-fg:#d9dee8; --term-dim:#8590a6;
+  --f-display:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --paper:#11141b; --sheet:#181c25; --ink:#e4e7ee; --muted:#9aa3b5; --rule:#2a303d;
+  --indigo:#8fb0f0; --indigo-soft:#1f2a42; --seal:#e86a58;
+  --ok:#6cc790; --ok-soft:#173022; --warn:#f0b54d; --warn-soft:#33270f;
+  --term-bg:#0b0e14; --term-fg:#d9dee8; --term-dim:#7a849a; color-scheme:dark}}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.8;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
+.wrap{max-width:1040px;margin:0 auto;display:grid;gap:24px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.35;margin:0}
+p{margin:0}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--indigo-soft);color:var(--indigo);padding:.1em .4em;border-radius:4px;overflow-wrap:anywhere}
+a{color:var(--indigo)}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+
+nav{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13.5px}
+.hero{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:36px clamp(20px,4vw,48px);display:grid;gap:12px}
+.eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);font-weight:700}
+.hero h1{font-size:clamp(30px,5vw,46px);font-weight:800}
+.hero p{max-width:64ch;color:var(--muted)}
+.need{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:8px}
+.need div{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;font-size:14px}
+.need b{display:block;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+
+.sec{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:28px clamp(20px,4vw,44px);display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px 36px}
+.sec > header{display:grid;gap:6px;align-content:start}
+.num{width:34px;height:34px;border-radius:50%;border:2px solid var(--indigo);color:var(--indigo);display:grid;place-items:center;font-family:var(--f-mono);font-weight:600}
+.sec > header h2{font-size:22px;font-weight:800}
+.sec > header p{color:var(--muted);font-size:13px;line-height:1.6}
+.body{display:grid;gap:14px;min-width:0}
+.body > p{max-width:68ch}
+.body h3{font-family:var(--f-body);font-size:16px;font-weight:700}
+
+.code{position:relative;background:var(--term-bg);color:var(--term-fg);border-radius:8px;font-family:var(--f-mono);font-size:13px;line-height:1.75}
+.code pre{margin:0;padding:14px 18px;padding-right:76px;overflow-x:auto}
+.code .d{color:var(--term-dim)}
+.copy{position:absolute;top:8px;right:8px;font:600 11.5px var(--f-body);color:var(--term-fg);background:#2a3347;border:0;border-radius:4px;padding:4px 10px;cursor:pointer}
+.copy:hover{background:#38445e}
+
+.tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.opt{border:1px solid var(--rule);border-radius:6px;padding:16px;display:grid;gap:10px;align-content:start;min-width:0}
+.opt .tag{font-size:12px;font-weight:700;color:var(--indigo)}
+.note{font-size:14px;border-left:3px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:0 6px 6px 0}
+.tip{font-size:14px;border-left:3px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:0 6px 6px 0}
+.muted{color:var(--muted);font-size:14px}
+ol,ul{margin:0;padding-left:1.3em;display:grid;gap:6px}
+li{font-size:14.5px}
+
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+td:first-child{min-width:200px}
+
+footer{color:var(--muted);font-size:12.5px;text-align:center}
+@media (max-width:760px){
+  .sec{grid-template-columns:1fr}
+  .need,.tabs{grid-template-columns:1fr}
+  td:first-child{min-width:140px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav aria-label="ページ"><a href="./">← ウラ取り ガイド</a><a href="https://github.com/yui-taro/uradori">GitHub リポジトリ</a><a href="#trouble">うまくいかないとき</a></nav>
+
+<section class="hero">
+  <div class="eyebrow">ウラ取り（uradori）· 導入ガイド</div>
+  <h1>入手して、読み込んで、確かめる</h1>
+  <p>Claude Code の mod「ウラ取り」を GitHub から入れて、帯が出るのを確かめるまでの手順です。所要時間は5分ほど。ここではフォルダを <code>~/mods/uradori</code> に置く前提で書いています。別の場所に置く場合は、以下のパスを読み替えてください。</p>
+  <div class="need">
+    <div><b>CLAUDE CODE</b>v2.1.287 以降</div>
+    <div><b>表示できる画面</b>ターミナル版 / デスクトップアプリの Code タブ / VS Code 拡張</div>
+    <div><b>あると楽</b>git（なくても ZIP で入手できます）</div>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">1</div><h2>入手する</h2><p>どちらか一方でかまいません。</p></header>
+  <div class="body">
+    <div class="tabs">
+      <div class="opt">
+        <span class="tag">git を使う（おすすめ）</span>
+        <div class="code"><pre>mkdir -p ~/mods
+git clone https://github.com/yui-taro/uradori ~/mods/uradori</pre></div>
+        <p class="muted">あとで <code>git pull</code> だけで更新できます。</p>
+      </div>
+      <div class="opt">
+        <span class="tag">ZIP でダウンロード</span>
+        <ol>
+          <li><a href="https://github.com/yui-taro/uradori">リポジトリ</a>の緑の［Code］→［Download ZIP］</li>
+          <li>展開してできた <code>uradori-main</code> フォルダを <code>uradori</code> に名前を変える</li>
+          <li><code>~/mods/</code>（ホームの下に <code>mods</code> フォルダを作る）に移す</li>
+        </ol>
+      </div>
+    </div>
+    <p class="muted">正しく置けていれば、<code>~/mods/uradori/.claude-plugin/plugin.json</code> があります。</p>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">2</div><h2>Claude Code に読み込ませる</h2><p>まず試すなら A、ずっと使うなら B。</p></header>
+  <div class="body">
+    <h3>A. このセッションだけ試す</h3>
+    <p>作業したいプロジェクトのフォルダで、mod のフォルダを指定して起動します。</p>
+    <div class="code"><pre><span class="d"># 例: 自分のプロジェクトで試す</span>
+cd ~/your-project
+claude --plugin-dir ~/mods/uradori</pre></div>
+
+    <h3>B. 毎回読み込む</h3>
+    <p><code>~/.claude/settings.json</code> の <code>env</code> に <code>CLAUDE_CODE_PLUGIN_DIRS</code> を追加します。デスクトップアプリにも効きます。</p>
+    <div class="code"><pre>{
+  "env": {
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/mods/uradori"
+  }
+}</pre></div>
+    <p class="note">すでに <code>settings.json</code> に設定が書いてある場合は、ファイルを置き換えずに、既存の <code>{ }</code> の中へ <code>"env"</code> を足してください。<code>"env"</code> がもうあるなら、その中に1行足すだけです。JSON はカンマの付け忘れ・付けすぎに注意。</p>
+    <p class="muted">書き換えたあとは Claude Code を起動し直してください（デスクトップアプリは一度終了して開き直す）。</p>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">3</div><h2>読み込まれたか確かめる</h2><p>Claude Code の入力欄で打ちます。</p></header>
+  <div class="body">
+    <div class="code"><pre>/plugin</pre></div>
+    <p><code>1 mod active · uradori</code> と表示されれば読み込めています。続けて <code>/uradori</code> を打ち、「まだチェックできる回答がありません」のような返事が出れば、コマンドも使える状態です。</p>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">4</div><h2>動作を確かめる</h2><p>付属のデモで、食い違いが見つかるところを見ます。</p></header>
+  <div class="body">
+    <p><code>demo/</code> は、ドキュメント（<code>docs/spec.md</code> では「タイムアウト30秒」）とコード（<code>src/config.ts</code> では <code>timeout: 60_000</code>）が食い違っている小さなプロジェクトです。</p>
+    <div class="code"><pre>cd ~/mods/uradori/demo
+claude --plugin-dir ~/mods/uradori</pre></div>
+    <p>手順 2 の B で設定した人は、<code>claude</code> だけで起動してかまいません。起動したら、次の文をそのまま送ります。毎回確実に食い違いが出ます。</p>
+    <div class="code"><pre>次の文をそのまま出力して：タイムアウトは30秒です（根拠：`src/config.ts`）。</pre></div>
+    <ol>
+      <li>Claude が回答し終わってから1〜2秒で、入力欄の上に「🔍 ウラ取り」の帯が出る</li>
+      <li>原文ポップアップが開き、<code>src/config.ts</code> の <code>timeout: 60_000</code> の行が ▶ で強調される</li>
+      <li>［訂正させる］を押すと、Claude がファイルを読み直して訂正し、その回答もまたチェックされる</li>
+    </ol>
+    <p class="tip">ここまで出れば導入は完了です。あとは普段どおり使うだけで、出典つきの回答が終わるたびに自動でチェックされます。</p>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">5</div><h2>使い方を調整する</h2><p>必要なときだけ。</p></header>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>したいこと</th><th>方法</th></tr></thead>
+      <tbody>
+        <tr><td>自動チェックを一時的に止める</td><td><code>/uradori off</code>（再開は <code>/uradori on</code>）</td></tr>
+        <tr><td>直前の回答をもう一度チェック</td><td><code>/uradori recheck</code></td></tr>
+        <tr><td>判定の精度を上げる</td><td><code>hooks/register.tsx</code> の <code>JUDGE_MODEL</code> を <code>'haiku'</code> から <code>'sonnet'</code> に変えて起動し直す（利用量は増えます）</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<section class="sec">
+  <header><div class="num">6</div><h2>更新・取り外し</h2></header>
+  <div class="body">
+    <h3>更新する</h3>
+    <div class="code"><pre>cd ~/mods/uradori &amp;&amp; git pull</pre></div>
+    <p class="muted">ZIP で入れた場合は、新しい ZIP で <code>~/mods/uradori</code> を置き換えます。どちらも、反映には Claude Code の起動し直しが必要です。</p>
+    <h3>取り外す</h3>
+    <ol>
+      <li><code>~/.claude/settings.json</code> から <code>CLAUDE_CODE_PLUGIN_DIRS</code> の行を消す（B で設定した場合）</li>
+      <li>Claude Code を起動し直す</li>
+      <li>不要なら <code>~/mods/uradori</code> フォルダを削除する</li>
+    </ol>
+  </div>
+</section>
+
+<section class="sec" id="trouble">
+  <header><h2>うまくいかないとき</h2><p>よくある原因と確かめ方。</p></header>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>症状</th><th>確かめること</th></tr></thead>
+      <tbody>
+        <tr><td><code>/plugin</code> に uradori が出ない</td><td>パスの指すフォルダに <code>.claude-plugin/plugin.json</code> があるか（ZIP の場合、フォルダが二重になっていないか）。<code>settings.json</code> が正しい JSON か。Claude Code が v2.1.287 以降か。起動し直したか。</td></tr>
+        <tr><td>読み込まれているのに帯が出ない</td><td>claude.ai のチャット画面やクラウドのセッションでは、mod は動いても表示する画面がありません。ターミナル版・デスクトップアプリの Code タブ・VS Code 拡張で使ってください。</td></tr>
+        <tr><td>回答してもチェックされない</td><td>回答に出典（ファイル名や URL）が入っているか。「〜を修正しました」のような作業の報告や質問はチェックしない仕様です。<code>/uradori off</code> にしていないか。</td></tr>
+        <tr><td>確認できない、になる</td><td>ログインが必要なページ、PDF、JavaScript で描画されるページ、プロジェクト外のファイル、<code>.env</code> などの秘密情報らしいファイルは読みません。</td></tr>
+        <tr><td>ポップアップが開かない</td><td>帯の［原文を見る］か <code>/uradori</code> で開けます。開けない画面では、結果が文字で表示されます。</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">mod はサンドボックスの外で、あなたの権限で動きます。判定のため、主張と原文の抜粋をセッションと同じアカウントのモデルに送ります。会社の PC で使う場合は社内のルールを確認してください。</p>
+  </div>
+</section>
+
+<footer>ウラ取り（uradori）· MIT License · <a href="https://github.com/yui-taro/uradori">github.com/yui-taro/uradori</a></footer>
+</div>
+<script>
+document.querySelectorAll('.code').forEach(function (box) {
+  var pre = box.querySelector('pre');
+  var btn = document.createElement('button');
+  btn.className = 'copy';
+  btn.type = 'button';
+  btn.textContent = 'コピー';
+  btn.addEventListener('click', function () {
+    var text = pre.innerText.split('\n').filter(function (l) { return !/^\s*#/.test(l); }).join('\n').trim();
+    var done = function () { btn.textContent = 'コピーしました'; setTimeout(function () { btn.textContent = 'コピー'; }, 1500); };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(done, function () { selectPre(pre); });
+    } else { selectPre(pre); }
+  });
+  box.appendChild(btn);
+});
+function selectPre(pre) {
+  var r = document.createRange(); r.selectNodeContents(pre);
+  var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+</script>
+</body>
+</html>
