@@ -1,6 +1,6 @@
 {
   "name": "uradori",
-  "version": "0.4.0",
+  "version": "0.12.0",
   "description": "Claudeの回答の根拠（ファイル・URL）をmod自身が原文で確かめ、食い違いを原文ポップアップと実際のサイトの該当箇所へのハイライトリンクで示す",
   "license": "MIT",
   "types": "./types/index.d.ts"

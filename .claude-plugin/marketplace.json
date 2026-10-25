@@ -1,0 +1,5 @@
+{
+  "name": "uradori-local",
+  "owner": { "name": "yui" },
+  "plugins": [{ "name": "uradori", "source": "./" }]
+}

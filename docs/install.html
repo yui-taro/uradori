@@ -146,7 +146,7 @@ claude --plugin-dir ~/mods/uradori</pre></div>
   <header><div class="num">3</div><h2>読み込まれたか確かめる</h2><p>Claude Code の入力欄で打ちます。</p></header>
   <div class="body">
     <div class="code"><pre>/plugin</pre></div>
-    <p><code>1 mod active · uradori</code> と表示されれば読み込めています。続けて <code>/uradori</code> を打ち、「まだチェックできる回答がありません」のような返事が出れば、コマンドも使える状態です。</p>
+    <p><code>1 mod active · uradori</code> と表示されれば読み込めています。続けて <code>/uradori</code> を打ち、「ウラ取り: まだチェックした回答はありません。」という返事が出れば、コマンドも使える状態です。</p>
   </div>
 </section>
 
@@ -159,8 +159,8 @@ claude --plugin-dir ~/mods/uradori</pre></div>
     <p>手順 2 の B で設定した人は、<code>claude</code> だけで起動してかまいません。起動したら、次の文をそのまま送ります。毎回確実に食い違いが出ます。</p>
     <div class="code"><pre>次の文をそのまま出力して：タイムアウトは30秒です（根拠：`src/config.ts`）。</pre></div>
     <ol>
-      <li>Claude が回答し終わってから1〜2秒で、入力欄の上に「🔍 ウラ取り」の帯が出る</li>
-      <li>原文ポップアップが開き、<code>src/config.ts</code> の <code>timeout: 60_000</code> の行が ▶ で強調される</li>
+      <li>Claude が回答し終わってから数秒で、入力欄の上に「🔍 ウラ取り ✔ 0 ✖ 1」の帯が出て、回答の文末にも ✖ が付く</li>
+      <li>原文ポップアップが自動で開き、<code>src/config.ts</code> の <code>timeout: 60_000</code> の行が ▶ で強調される</li>
       <li>［訂正させる］を押すと、Claude がファイルを読み直して訂正し、その回答もまたチェックされる</li>
     </ol>
     <p class="tip">ここまで出れば導入は完了です。あとは普段どおり使うだけで、出典つきの回答が終わるたびに自動でチェックされます。</p>
@@ -175,6 +175,10 @@ claude --plugin-dir ~/mods/uradori</pre></div>
       <tbody>
         <tr><td>自動チェックを一時的に止める</td><td><code>/uradori off</code>（再開は <code>/uradori on</code>）</td></tr>
         <tr><td>直前の回答をもう一度チェック</td><td><code>/uradori recheck</code></td></tr>
+        <tr><td>チェックされなかった理由を知る</td><td><code>/uradori why</code></td></tr>
+        <tr><td>出典がなくても毎回チェックする</td><td><code>/uradori strict</code>（もう一度で元に戻す）</td></tr>
+        <tr><td>✖ のときポップアップを自動で開かない</td><td><code>/uradori popup off</code>（戻すときは <code>on</code>）</td></tr>
+        <tr><td>Web Archive に URL を送らない</td><td><code>/uradori archive off</code>（戻すときは <code>on</code>）</td></tr>
         <tr><td>判定の精度を上げる</td><td><code>hooks/register.tsx</code> の <code>JUDGE_MODEL</code> を <code>'haiku'</code> から <code>'sonnet'</code> に変えて起動し直す（利用量は増えます）</td></tr>
       </tbody>
     </table></div>
@@ -204,9 +208,10 @@ claude --plugin-dir ~/mods/uradori</pre></div>
       <tbody>
         <tr><td><code>/plugin</code> に uradori が出ない</td><td>パスの指すフォルダに <code>.claude-plugin/plugin.json</code> があるか（ZIP の場合、フォルダが二重になっていないか）。<code>settings.json</code> が正しい JSON か。Claude Code が v2.1.287 以降か。起動し直したか。</td></tr>
         <tr><td>読み込まれているのに帯が出ない</td><td>claude.ai のチャット画面やクラウドのセッションでは、mod は動いても表示する画面がありません。ターミナル版・デスクトップアプリの Code タブ・VS Code 拡張で使ってください。</td></tr>
-        <tr><td>回答してもチェックされない</td><td>回答に出典（ファイル名や URL）が入っているか。「〜を修正しました」のような作業の報告や質問はチェックしない仕様です。<code>/uradori off</code> にしていないか。</td></tr>
-        <tr><td>確認できない、になる</td><td>ログインが必要なページ、PDF、JavaScript で描画されるページ、プロジェクト外のファイル、<code>.env</code> などの秘密情報らしいファイルは読みません。</td></tr>
-        <tr><td>ポップアップが開かない</td><td>帯の［原文を見る］か <code>/uradori</code> で開けます。開けない画面では、結果が文字で表示されます。</td></tr>
+        <tr><td>回答してもチェックされない</td><td><code>/uradori why</code> で理由を確かめられます。回答に出典（ファイル名や URL）が入っているか。「〜を修正しました」のような作業の報告や質問はチェックしない仕様です。<code>/uradori off</code> にしていないか。質問に「根拠」「出典」などを入れると、出典を付けて答えるよう Claude に伝わります。</td></tr>
+        <tr><td>？ 🔒 📄 ⏸ が付く</td><td>？ はログインが必要なページ、JavaScript で描画されるページ、プロジェクト外や <code>.env</code> などの秘密情報らしいファイル、時間切れ。🔒 はボット対策で取得できず Web Archive にもないページ。📄 は PDF。⏸ は社内アドレスや認証情報らしい値を含む URL で、ポップアップの［原文を取りに行く］を押したときだけ取りに行きます。</td></tr>
+        <tr><td>ポップアップが自動で開かない</td><td>ターミナルの幅が144桁未満だと、代わりにトーストで知らせます。<code>/uradori popup off</code> にしていないかも確認してください。</td></tr>
+        <tr><td>ポップアップを開きたい</td><td>帯の［原文を見る］か <code>/uradori</code> で開けます。開けない画面では、結果が文字で表示されます。</td></tr>
       </tbody>
     </table></div>
     <p class="note">mod はサンドボックスの外で、あなたの権限で動きます。判定のため、主張と原文の抜粋をセッションと同じアカウントのモデルに送ります。会社の PC で使う場合は社内のルールを確認してください。</p>

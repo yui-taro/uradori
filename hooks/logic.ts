@@ -183,6 +183,8 @@ export function cleanClaim(text: string): string {
     .replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6})\s+/, '') // 箇条書き・見出し
     .replace(/^\s*>\s?/, '')
     .replace(/[（(]\s*(?:根拠|出典|参照|参考|ソース|source|see|ref)?\s*[:：]?\s*(?:の\s*\d+\s*行目)?\s*[)）]/gi, '')
+    // 「（出典: … の「料金」節「上限は50件」）」のような、場所や引用つきの出典の説明
+    .replace(/[（(]\s*(?:根拠|出典|参照|参考|ソース|sources?|see|ref)\s*[:：][^（）()]*[)）]/gi, '')
     .replace(/[（(]([^（）()]*)[)）]/g, (whole, inner: string) => (isCitationOnly(inner) ? '' : whole))
     .replace(/\s+/g, ' ')
     .replace(/\s*[:：]\s*$/, '')
@@ -221,8 +223,8 @@ export function isActionReport(claim: string): boolean {
 export function inlinePairs(
   answer: string,
   refs: readonly SourceRef[],
-): { pairs: { claim: string; source: UradoriSource }[]; needsPairing: UradoriSource[] } {
-  const pairs: { claim: string; source: UradoriSource }[] = []
+): { pairs: { claim: string; source: UradoriSource; quote?: string }[]; needsPairing: UradoriSource[] } {
+  const pairs: { claim: string; source: UradoriSource; quote?: string }[] = []
   const needsPairing: UradoriSource[] = []
   const seen = new Set<string>()
 
@@ -240,9 +242,119 @@ export function inlinePairs(
     const key = `${sourceKey(ref.source)}|${claim}`
     if (seen.has(key)) continue
     seen.add(key)
-    pairs.push({ claim, source: ref.source })
+    const quote = citedQuote(answer, ref)
+    pairs.push(quote !== undefined ? { claim, source: ref.source, quote } : { claim, source: ref.source })
   }
   return { pairs, needsPairing }
+}
+
+// ───────────────────────────── Claude が書いた引用を原文と照合する
+
+/**
+ * 出典のすぐ後ろ（同じかっこの中）に「」で書かれた引用。
+ * 「（出典: https://… の「料金」節「上限は50件」）」→「上限は50件」（最後の「」を引用とみなす）
+ */
+export function citedQuote(answer: string, ref: SourceRef): string | undefined {
+  const sentence = sentenceAround(answer, ref.start, ref.end)
+  const before = answer.slice(sentence.start, ref.start)
+  const opened = (before.match(/[（(]/g) ?? []).length - (before.match(/[）)]/g) ?? []).length
+  if (opened <= 0) return undefined
+  // かっこが閉じるところまで
+  const rest = answer.slice(ref.end, sentence.start + sentence.text.length)
+  let depth = opened
+  let end = rest.length
+  for (let i = 0; i < rest.length; i += 1) {
+    const c = rest[i]
+    if (c === '（' || c === '(') depth += 1
+    if (c === '）' || c === ')') depth -= 1
+    if (depth === 0) {
+      end = i
+      break
+    }
+  }
+  const quotes = [...rest.slice(0, end).matchAll(/[「『"“]([^」』"”]{4,200})[」』"”]/g)].map(m => m[1] ?? '')
+  return quotes.at(-1)?.trim() || undefined
+}
+
+/**
+ * URL のテキストフラグメント（#:~:text=…）が指している文。
+ * text=始まり,終わり の形は「始まり…終わり」にする（前後の文脈 prefix-, -suffix は外す）
+ */
+export function fragmentQuote(url: string): string | undefined {
+  const m = /:~:(?:.*&)?text=([^&]*)/.exec(url)
+  if (m?.[1] === undefined) return undefined
+  const dec = (s: string): string => {
+    try {
+      return decodeURIComponent(s)
+    } catch {
+      return s
+    }
+  }
+  const parts = m[1].split(',')
+  if (parts[0]?.endsWith('-')) parts.shift()
+  if (parts.at(-1)?.startsWith('-')) parts.pop()
+  const text = parts.map(dec).map(s => s.trim()).filter(Boolean).join('…')
+  return [...text.replace(/…/g, '')].length >= 4 ? text : undefined
+}
+
+/** 照合のための正規化: 全角・半角をそろえ、空白・表の区切り・引用符の違いを無視する */
+function normalizeQuote(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[‘’`´]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[\s|]+/g, '')
+}
+
+/**
+ * 引用が原文に一字一句あるかを確かめ、あればその行を返す（なければ undefined）。
+ * 「…」「...」で省略された引用は、それぞれの部分が順に（近くに）出てくれば一致とする。
+ * モデルを使わないので、判定モデルの間違いに左右されない。
+ */
+export function findQuote(lines: readonly UradoriLine[], quote: string): UradoriLine[] | undefined {
+  const pieces = quote
+    .split(/…|\.{3}|‥/)
+    .map(normalizeQuote)
+    .filter(p => p.length > 0)
+  if (pieces.length === 0) return undefined
+
+  // 行をつないだ文字列と、各行がどこから始まるか
+  let joined = ''
+  const starts: number[] = []
+  for (const l of lines) {
+    starts.push(joined.length)
+    joined += normalizeQuote(l.text)
+  }
+  const lineAt = (pos: number): number => {
+    let lo = 0
+    let hi = starts.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if ((starts[mid] ?? 0) <= pos) lo = mid
+      else hi = mid - 1
+    }
+    return lo
+  }
+
+  for (let from = joined.indexOf(pieces[0] ?? ''); from !== -1; from = joined.indexOf(pieces[0] ?? '', from + 1)) {
+    let end = from + (pieces[0]?.length ?? 0)
+    let isFound = true
+    for (const piece of pieces.slice(1)) {
+      const at = joined.indexOf(piece, end)
+      // 省略をはさんだ部分は、離れすぎていたら別の文とみなす
+      if (at === -1 || at - end > 1000) {
+        isFound = false
+        break
+      }
+      end = at + piece.length
+    }
+    if (!isFound) continue
+    const first = lineAt(from)
+    const last = lineAt(Math.max(from, end - 1))
+    return lines.slice(first, Math.min(last, first + 2) + 1)
+  }
+  return undefined
 }
 
 // ───────────────────────────── 原文を整える
@@ -513,6 +625,23 @@ export function parseJudgement(text: string, excerpt: readonly UradoriLine[]): J
   return { verdict, evidence, reason }
 }
 
+/**
+ * 根拠の行を示せない判定は信じない: 一致・食い違いでも、原文の行を1つも示せなければ unknown（？）。
+ * ただし Claude の引用が原文に一字一句あったときは、その行を一致の根拠にする（モデルの言葉ではなく原文の行なので）
+ */
+export function groundVerdict(judged: Judgement, quoteHit?: readonly UradoriLine[]): Judgement {
+  if (judged.verdict === 'unknown' || judged.evidence.length > 0) return judged
+  if (judged.verdict === 'match' && quoteHit !== undefined && quoteHit.length > 0) {
+    return { ...judged, evidence: [...quoteHit] }
+  }
+  const said = judged.verdict === 'match' ? '一致' : '食い違い'
+  return {
+    verdict: 'unknown',
+    evidence: [],
+    reason: `判定モデルが原文の根拠の行を示さなかったため、確認できないにしました（モデルの判定: ${said}${judged.reason ? `・${judged.reason}` : ''}）`,
+  }
+}
+
 /** 文字列の中の最初の JSON（{...} か [...]）を取り出す */
 export function firstJson(text: string): unknown {
   const cleaned = text.replace(/```(?:json)?/gi, '')
@@ -594,4 +723,332 @@ export function correctionPrompt(
     '',
     ...blocks,
   ].join('\n')
+}
+
+// ───────────────────────────── 根拠を求められた質問（ウラ取り対象のターン）
+
+// 「根拠付きで」「一次情報は？」「ソースは？」など、根拠そのものを求める言い方。
+// 「ソースコード」「公式（数式）」のような別の意味は拾わない
+const EVIDENCE_REQUEST_RE =
+  /(根拠|出典|一次(?:情報|資料|ソース)|原典|典拠|引用元|参考文献|裏付け|裏取り|ウラ取り|エビデンス|ファクトチェック|事実確認|ソース(?!コード|ファイル|を(?:書|直|修正|編集|読))|公式(?:サイト|ドキュメント|情報|発表|資料)|正確な情報|正確に(?:教えて|知りたい)|どこに書いて(?:ある|あります)|本当に(?:正しい|合って)|\b(?:sources?|citations?|cite|evidence|primary sources?|fact[- ]?check)\b)/i
+
+/** 質問が根拠を求めているなら、その手がかりになった言葉を返す */
+export function evidenceRequest(prompt: string): string | undefined {
+  return EVIDENCE_REQUEST_RE.exec(prompt)?.[0]
+}
+
+/** 根拠を求められたターンで、Claude だけに渡す指示（ユーザーには見えない） */
+export const EVIDENCE_CONTEXT = [
+  '【ウラ取りmod】この質問は根拠を求めています。回答では次を守ってください。',
+  '- 主張ごとに出典を、確認できる URL（https://…）かプロジェクト内のファイルパス（行番号つき）で書く。出典名だけ（URLなし）の書き方はしない。',
+  '- URL だけでなく、そのページの「どこに」書いてあるかも示す。見出し（節の名前）と、根拠になった箇所の短い引用（原文そのまま、15語程度まで）を「」で添える。引用はウラ取りmod が原文と一字一句照合する。',
+  '- 引用した箇所へ直接飛べるよう、Web ページの URL には可能ならテキストフラグメント（#:~:text=原文の一部）を付ける。引用は実際に開いた原文と一字一句同じにする。',
+  '- 出典は HTML のページを優先する。PDF はウラ取りmod が自動で読めないので、同じ内容の HTML ページ（公式サイトの本文、法令データベースなど）があればそちらを書く。',
+  '- PDF しかないときだけ PDF の URL を書き、#page=N とページ番号・短い引用を添える（自動では確かめられず、利用者が自分で開いて確かめることになる）。',
+  '- URL のすぐ後ろは半角スペースで区切ってから場所を書く（URL に場所の説明が混ざらないように）。',
+  '- 書き方の例: 「上限は50件です（出典: https://example.com/limits#:~:text=上限は50件 の「料金と上限」節「1回あたり上限は50件」）」',
+  '- 確かめられなかった主張は「未確認」と明記する。',
+].join('\n')
+
+// 「主な出典」「参考」「Sources」などの見出し
+const SOURCES_HEADING_RE =
+  /^\s*(?:#{1,6}\s*|\*\*\s*)?(?:主な|参考)?(?:出典|参考(?:文献|資料|リンク)?|根拠|引用元|典拠|sources?|references?)/i
+const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)]|[①-⑳])\s+(.+)$/
+// 「農林水産省「〜」によると」のように、URLのない出典名を主語にした言い方
+const NAMED_BY_RE =
+  /([^\s、。（(]{0,30}(?:「[^」]{1,60}」|『[^』]{1,60}』|省|庁|協会|機構|機関|センター|大学|研究所|規格|白書|統計|ガイドライン|公式サイト|ドキュメント))\s*(?:によると|によれば|では|の資料)/g
+
+/**
+ * URL もファイルパスもない「名前だけの出典」を返す。
+ * 出典の見出しの下の箇条書きと、「〇〇によると」の〇〇が対象。
+ */
+export function findNamedSources(answer: string): string[] {
+  const named: string[] = []
+  const add = (text: string): void => {
+    const name = text.replace(/\*\*|`/g, '').replace(/\s+/g, ' ').trim().slice(0, 80)
+    if (name.length >= 2 && !named.includes(name)) named.push(name)
+  }
+  let inSources = false
+  for (const line of answer.split('\n')) {
+    if (line.trim() === '') continue
+    if (SOURCES_HEADING_RE.test(line) && !LIST_ITEM_RE.test(line)) {
+      inSources = true
+      continue
+    }
+    if (/^\s*#{1,6}\s/.test(line)) {
+      inSources = false
+      continue
+    }
+    const item = LIST_ITEM_RE.exec(line)
+    if (inSources && item?.[1] !== undefined && findSourceRefs(line).length === 0) add(item[1])
+  }
+  for (const m of answer.matchAll(NAMED_BY_RE)) {
+    const sentence = answer.slice(Math.max(0, (m.index ?? 0) - 1), (m.index ?? 0) + m[0].length + 80)
+    if (m[1] !== undefined && !/https?:\/\//.test(sentence)) add(m[1])
+  }
+  return named
+}
+
+/**
+ * 一次情報で確かめたい度合い。数値・日付・法令・規格などを含む主張ほど高い。
+ * 根拠を求められたターンでは、上限の枠をこれが高い主張から使う
+ */
+export function claimPriority(claim: string): number {
+  const digits = (claim.match(/\d+/g) ?? []).length
+  const facts = (claim.match(/[%％]|年|月|日|件|円|回|秒|条|項|号|規格|法|令|JAS|ISO|JIS|RFC|版|以上|以下|未満|最大|最小|上限|下限|約|割/g) ?? []).length
+  return digits * 2 + facts
+}
+
+/** ［一次情報で裏付けさせる］で Claude に送る依頼文 */
+export function groundingPrompt(named: readonly string[]): string {
+  return [
+    '【ウラ取りmod】直前の回答の根拠を、一次情報で裏付けてください。',
+    named.length > 0
+      ? `次の出典は名前だけで、URL がないため原文を確かめられませんでした:\n${named.map(n => `- ${n}`).join('\n')}`
+      : '直前の回答には、確かめられる出典（URL・ファイル）がありませんでした。',
+    '',
+    '主要な主張ごとに、一次情報（公的機関・法令・規格・原典・論文・公式ドキュメント）を検索して実際に開き、',
+    '「主張（出典: https://… の該当ページ・見出し「原文の短い引用」）」の形で、ページ内のどこに書いてあるかまで示して書き直してください。',
+    '一次情報で確かめられなかった主張は「未確認」と明記してください。',
+  ].join('\n')
+}
+
+// ───────────────────────────── アクセス拒否（ボット対策）への対処
+
+/** ブラウザと同じ見え方で取りに行くためのヘッダー（UA だけで弾くサイトがある） */
+export const BROWSER_HEADERS: Record<string, string> = {
+  'user-agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+  accept: 'text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.5',
+  'accept-language': 'ja,en;q=0.8',
+}
+
+// Cloudflare などの「人間か確認します」ページ。200 で返ってくることもある
+const CHALLENGE_RE =
+  /<title>\s*(?:just a moment|attention required|access denied|forbidden|403 forbidden|please wait|security check|are you a robot)|cf-chl-|challenge-platform|enable javascript and cookies to continue|captcha-delivery|perimeterx|px-captcha/i
+
+/** アクセス拒否・ボット対策のページか（本文を原文として使えない） */
+export function isBlockedResponse(status: number, text: string): boolean {
+  if ([401, 403, 407, 429, 451, 503].includes(status)) return true
+  return CHALLENGE_RE.test(text.slice(0, 4000))
+}
+
+/** Web Archive（Wayback Machine）の最新の保存版。id_ で保存時の原文そのものを返す */
+export function archiveUrl(url: string): string {
+  return `https://web.archive.org/web/2id_/${url}`
+}
+
+/** memento-datetime ヘッダー（保存された日時）を YYYY-MM-DD にする */
+export function archiveDate(header: string | undefined): string {
+  if (header === undefined) return ''
+  const d = new Date(header)
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+// ───────────────────────────── 自動で取りに行ってよい URL か
+
+/**
+ * 社内・ローカルのアドレスか: localhost、プライベート・リンクローカルの IP、
+ * .local や .internal、ドットのないホスト名（社内のサーバー名）。
+ * new URL() を通したホスト名を渡す（10進・16進の IP は 127.0.0.1 の形に直っている）
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  if (h === '') return true
+  if (/(^|\.)(localhost|local|internal|intranet|corp|lan|home\.arpa)$/.test(h)) return true
+  if (h.includes(':')) {
+    // IPv6: ループバック・未指定・ユニークローカル（fc00::/7）・リンクローカル（fe80::/10）・IPv4 射影
+    return h === '::1' || h === '::' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith('::ffff:')
+  }
+  const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h)
+  if (ip === null) return !h.includes('.')
+  const [a, b] = [Number(ip[1]), Number(ip[2])]
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) || // CGNAT
+    (a === 169 && b === 254) || // リンクローカル（クラウドのメタデータもここ）
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224
+  )
+}
+
+// 認証情報が入っていそうなクエリの名前
+const SECRET_PARAM_RE = /token|secret|passw|pwd|api[_-]?key|apikey|access[_-]?key|auth|session|signature|credential/i
+const SECRET_PARAM_NAMES = new Set(['code', 'key', 'sig', 'sid', 'jwt'])
+
+/** 長いランダムな文字列か（git のコミットハッシュは除く） */
+function isTokenLike(text: string): boolean {
+  if (/^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(text)) return false
+  return text.length >= 32 && /^[A-Za-z0-9+/_=.-]+$/.test(text) && /\d/.test(text) && /[A-Za-z]/.test(text) &&
+    (text.match(/-/g) ?? []).length <= 3
+}
+
+/**
+ * Claude が書いた URL を、人の確認なしに取りに行かない理由（取りに行ってよければ undefined）。
+ * 読んだページに仕込まれた指示で、Claude が「出典」として秘密を載せた URL や
+ * 社内のアドレスを書かされても、mod が勝手にそこへアクセスしないように
+ */
+export function urlHoldReason(url: string): string | undefined {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return 'URL として読めないため'
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return 'http・https 以外の URL のため'
+  if (u.username !== '' || u.password !== '') return 'URL にユーザー名・パスワードが含まれるため'
+  if (isPrivateHost(u.hostname)) return '社内・ローカルのアドレスのため'
+  if (u.search.length > 300) return 'URL のクエリが長すぎるため'
+  const params: [string, string][] = []
+  u.searchParams.forEach((value, name) => params.push([name, value]))
+  for (const [name, value] of params) {
+    if (SECRET_PARAM_RE.test(name) || SECRET_PARAM_NAMES.has(name.toLowerCase())) {
+      return `URL に認証情報らしい値（${name.slice(0, 20)}=…）が含まれるため`
+    }
+    if (value.length >= 64 || isTokenLike(value)) return 'URL のクエリに長いランダムな文字列が含まれるため'
+  }
+  for (const segment of u.pathname.split('/')) {
+    let part = segment
+    try {
+      part = decodeURIComponent(segment)
+    } catch {
+      // そのまま調べる
+    }
+    if (isTokenLike(part)) return 'URL のパスに長いランダムな文字列が含まれるため'
+  }
+  return undefined
+}
+
+// ───────────────────────────── PDF（自動では読めない）
+
+/** URL のパスが .pdf で終わるか（?query や #page=6 は見ない） */
+export function isPdfUrl(url: string): boolean {
+  return /\.pdf$/i.test(url.split(/[?#]/)[0] ?? '')
+}
+
+/** PDF の URL の #page=6 を読む */
+export function pdfPage(url: string): number | undefined {
+  const m = /#(?:.*&)?page=(\d{1,5})\b/i.exec(url)
+  return m?.[1] === undefined ? undefined : Number(m[1])
+}
+
+/** 🔒（アクセス拒否）・📄（PDF）の主張を、自動で取得できる別の一次情報で裏付け直す依頼文 */
+export function alternativeSourcePrompt(
+  items: readonly { claim: string; source: UradoriSource; isPdf?: boolean }[],
+): string {
+  const hasPdf = items.some(c => c.isPdf)
+  const hasBlocked = items.some(c => !c.isPdf)
+  const why = [hasBlocked ? 'アクセス制限（ボット対策など）' : '', hasPdf ? 'PDF（ウラ取りmod は自動で読めません）' : '']
+    .filter(Boolean)
+    .join('や')
+  return [
+    `【ウラ取りmod】次の主張の出典は${why}のため、原文を自動で確かめられませんでした。`,
+    ...items.map((c, i) => `${i + 1}. ${c.claim}（出典: ${sourceLabel(c.source)}${c.isPdf ? '・PDF' : ''}）`),
+    '',
+    '同じ内容を、別の一次情報（公的機関・法令・規格・原典・公式ドキュメント。ログインやボット確認のない HTML のページ）で探して実際に開き、',
+    '「主張（出典: https://… の該当ページ・見出し「原文の短い引用」）」の形で、ページ内のどこに書いてあるかまで示して書き直してください。見つからなければ「未確認」と明記してください。',
+  ].join('\n')
+}
+
+// ───────────────────────────── 回答の本文に印を付ける
+
+/**
+ * 主張が回答のどの文にあるか: その文を回答の原文どおりに返す（印はこの文の後ろに付ける）。
+ * 主張はかっこ・強調・`` ` `` を外してあるので、それらを無視して探す。見つからなければ ''
+ */
+export function claimAnchor(answer: string, claim: string): string {
+  // `` ` `` と * ~ を外した回答と、外した位置から元の位置への対応
+  const kept: number[] = []
+  let bare = ''
+  for (let i = 0; i < answer.length; i += 1) {
+    const c = answer[i] ?? ''
+    if (c === '`' || c === '*' || c === '~') continue
+    kept.push(i)
+    bare += c
+  }
+  const wanted = claim.replace(/[`*~]/g, '').trim()
+  if (wanted === '') return ''
+  // 主張の途中にあった出典の説明を外していることがあるので、見つからなければ頭の部分で探す
+  let at = bare.indexOf(wanted)
+  let length = wanted.length
+  if (at === -1 && [...wanted].length >= 8) {
+    const head = [...wanted].slice(0, 12).join('')
+    at = bare.indexOf(head)
+    length = head.length
+  }
+  if (at === -1) return ''
+  const start = kept[at] ?? 0
+  const end = (kept[at + length - 1] ?? start) + 1
+  return sentenceAround(answer, start, end).text.trim()
+}
+
+/** 本文のこの位置がコードブロック（``` の中）か */
+function isInFence(text: string, at: number): boolean {
+  return ((text.slice(0, at).match(/^\s*(```|~~~)/gm) ?? []).length) % 2 === 1
+}
+
+/**
+ * 本文の、各主張の文の後ろに印を差し込む（表示だけ。保存された回答は変えない）。
+ * 同じ文の主張の印はまとめる。見つからない文・コードブロックの中の文には付けない。
+ * 戻り値の placed は、印を付けられた items の番号
+ */
+export function placeMarks(
+  text: string,
+  items: readonly { anchor: string; mark: string }[],
+): { text: string; placed: number[] } {
+  const at = new Map<number, string[]>()
+  const placed: number[] = []
+  items.forEach((item, i) => {
+    if (item.anchor === '') return
+    const start = text.indexOf(item.anchor)
+    if (start === -1) return
+    const end = start + item.anchor.length
+    if (isInFence(text, start)) return
+    at.set(end, [...(at.get(end) ?? []), item.mark])
+    placed.push(i)
+  })
+  let out = text
+  // 後ろから差し込むと位置がずれない
+  for (const end of [...at.keys()].sort((a, b) => b - a)) {
+    out = `${out.slice(0, end)} ${(at.get(end) ?? []).join(' ')}${out.slice(end)}`
+  }
+  return { text: out, placed }
+}
+
+/** 端末での表示幅（全角・絵文字は2マス） */
+export function cellWidth(text: string): number {
+  let n = 0
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0
+    if (cp < 0x20 || (cp >= 0x300 && cp < 0x370) || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f)) continue
+    const isWide =
+      (cp >= 0x1100 && cp <= 0x115f) ||
+      (cp >= 0x2e80 && cp <= 0xa4cf) ||
+      (cp >= 0xac00 && cp <= 0xd7a3) ||
+      (cp >= 0xf900 && cp <= 0xfaff) ||
+      (cp >= 0xfe30 && cp <= 0xfe4f) ||
+      (cp >= 0xff00 && cp <= 0xff60) ||
+      (cp >= 0xffe0 && cp <= 0xffe6) ||
+      (cp >= 0x1f300 && cp <= 0x1faff) ||
+      (cp >= 0x20000 && cp <= 0x3fffd) ||
+      cp === 0x26a0 || cp === 0x2714 || cp === 0x2716
+    n += isWide ? 2 : 1
+  }
+  return n
+}
+
+/** ちょうど cells マスにする: 長ければ「…」で切り、短ければ空白で埋める */
+export function fitCells(text: string, cells: number): string {
+  // 改行・タブだけを空白にする（行頭の字下げは残す）
+  const flat = text.replace(/[\r\n\t]+/g, ' ')
+  if (cellWidth(flat) <= cells) return flat + ' '.repeat(cells - cellWidth(flat))
+  let out = ''
+  for (const ch of flat) {
+    if (cellWidth(out + ch) > cells - 1) break
+    out += ch
+  }
+  return `${out}…${' '.repeat(Math.max(0, cells - 1 - cellWidth(out)))}`
 }

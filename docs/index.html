@@ -4,38 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ウラ取り mod ガイド</title>
-<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Claude Code の mod「ウラ取り（uradori）」でできること、動く仕組み、mod としての作り">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Layout: 校正紙のような一枚もの。左に見出し欄、右に本文の2段組。朱の検印は「✔」の象徴としてだけ使う */
+/* Layout: 校正紙のような一枚もの。左に見出し欄、右に本文の2段組。朱の検印は「原文で確かめた」の象徴としてだけ使う */
 :root{
   --paper:#f6f7f9; --sheet:#ffffff; --ink:#1d2433; --muted:#5d6577; --rule:#dde1e8;
   --indigo:#2b4a8b; --indigo-soft:#e7edf8; --seal:#c23b2a;
-  --ok:#2f7d4f; --ok-soft:#e3f2e8; --warn:#a96a00; --warn-soft:#fbf0d9; --unk:#6b7280; --unk-soft:#eceef2;
+  --ok:#2f7d4f; --ok-soft:#e3f2e8; --bad:#b3261e; --bad-soft:#fbe4e1; --drift:#a96a00; --drift-soft:#fbf0d9;
+  --unk:#5f6676; --unk-soft:#eceef2;
   --term-bg:#151a24; --term-fg:#d9dee8; --term-dim:#8590a6;
   --f-display:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
   --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:light;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+@media (prefers-color-scheme: dark){:root{
   --paper:#11141b; --sheet:#181c25; --ink:#e4e7ee; --muted:#9aa3b5; --rule:#2a303d;
   --indigo:#8fb0f0; --indigo-soft:#1f2a42; --seal:#e86a58;
-  --ok:#6cc790; --ok-soft:#173022; --warn:#f0b54d; --warn-soft:#33270f; --unk:#a3abba; --unk-soft:#252a35;
+  --ok:#6cc790; --ok-soft:#173022; --bad:#f08a80; --bad-soft:#3a1c1a; --drift:#f0b54d; --drift-soft:#33270f;
+  --unk:#a3abba; --unk-soft:#252a35;
   --term-bg:#0b0e14; --term-fg:#d9dee8; --term-dim:#7a849a; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --paper:#11141b; --sheet:#181c25; --ink:#e4e7ee; --muted:#9aa3b5; --rule:#2a303d;
-  --indigo:#8fb0f0; --indigo-soft:#1f2a42; --seal:#e86a58;
-  --ok:#6cc790; --ok-soft:#173022; --warn:#f0b54d; --warn-soft:#33270f; --unk:#a3abba; --unk-soft:#252a35;
-  --term-bg:#0b0e14; --term-fg:#d9dee8; --term-dim:#7a849a; color-scheme:dark}
 
-body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.8;
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15.5px;line-height:1.8;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px}
 .wrap{max-width:1040px;margin:0 auto;display:grid;gap:28px}
 h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.35;margin:0}
 p{margin:0}
-code,kbd,.mono{font-family:var(--f-mono);font-size:.88em}
-code{background:var(--indigo-soft);color:var(--indigo);padding:.1em .4em;border-radius:4px}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--indigo-soft);color:var(--indigo);padding:.1em .4em;border-radius:4px;overflow-wrap:anywhere}
 a{color:var(--indigo)}
 :focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
 
@@ -47,7 +46,8 @@ a{color:var(--indigo)}
 .lead{font-size:clamp(17px,2.2vw,20px);margin-top:14px;font-weight:500}
 .hero .sub{color:var(--muted);margin-top:10px;max-width:60ch}
 .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-.chip{font-size:12.5px;border:1px solid var(--rule);border-radius:999px;padding:2px 10px;color:var(--muted)}
+.chip{font-size:12.5px;border:1px solid var(--rule);border-radius:999px;padding:2px 10px;color:var(--muted);text-decoration:none}
+a.chip{border-color:var(--indigo);color:var(--indigo);font-weight:700}
 .seal{width:132px;height:132px;border:4px solid var(--seal);border-radius:50%;display:grid;place-items:center;color:var(--seal);
   font-family:var(--f-display);font-weight:800;font-size:26px;line-height:1.15;text-align:center;transform:rotate(-8deg);opacity:.9}
 .seal span{display:block;font-size:12px;font-family:var(--f-body);letter-spacing:.1em;font-weight:700}
@@ -58,23 +58,29 @@ a{color:var(--indigo)}
 .sec > header p{color:var(--muted);font-size:13px;margin-top:6px;line-height:1.6}
 .body{display:grid;gap:20px;min-width:0}
 .body > p{max-width:68ch}
+.body h3{font-family:var(--f-body);font-size:16px;font-weight:700}
 
 /* Terminal mock */
 .term{background:var(--term-bg);color:var(--term-fg);border-radius:8px;padding:16px 18px;font-family:var(--f-mono);font-size:13px;line-height:1.75;overflow-x:auto;white-space:pre}
-.term .d{color:var(--term-dim)} .term .w{color:#f0b54d} .term .g{color:#6cc790} .term .b{background:#2a3347;padding:0 6px;border-radius:3px}
-.term .h{background:#3a3220}
+.term .d{color:var(--term-dim)} .term .x{color:#f08a80} .term .g{color:#6cc790} .term .b{background:#2a3347;padding:0 6px;border-radius:3px}
+.term .h{background:#3a2220}
 
-/* Verdicts */
-.verdicts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.v{border-radius:6px;padding:14px 16px;display:grid;gap:4px}
-.v b{font-size:22px;font-family:var(--f-mono)}
-.v.ok{background:var(--ok-soft);color:var(--ok)} .v.warn{background:var(--warn-soft);color:var(--warn)} .v.unk{background:var(--unk-soft);color:var(--unk)}
-.v p{color:var(--ink);font-size:14px;line-height:1.6}
+/* Marks */
+.marks{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.v{border-radius:6px;padding:12px 14px;display:grid;gap:2px;align-content:start}
+.v b{font-size:22px;font-family:var(--f-mono);line-height:1.3}
+.v strong{font-size:14px}
+.v p{color:var(--ink);font-size:13.5px;line-height:1.6}
+.v.ok{background:var(--ok-soft);color:var(--ok)} .v.bad{background:var(--bad-soft);color:var(--bad)}
+.v.drift{background:var(--drift-soft);color:var(--drift)} .v.unk{background:var(--unk-soft);color:var(--unk)}
+.v.sub{background:transparent;border:1px dashed var(--rule);color:var(--unk)}
+.legend{font-size:13px;color:var(--muted)}
 
 /* Feature list */
 .feats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 28px}
 .feat h3{font-size:17px;font-weight:800;font-family:var(--f-body)}
 .feat p{color:var(--muted);font-size:14.5px;margin-top:4px}
+.new{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--seal);border:1px solid var(--seal);border-radius:3px;padding:0 5px;margin-left:6px;vertical-align:2px}
 
 /* Pipeline */
 .flow{display:grid;gap:0;counter-reset:s}
@@ -85,7 +91,7 @@ a{color:var(--indigo)}
 .step h3{font-family:var(--f-body);font-size:16px;font-weight:700;line-height:32px}
 .step p{color:var(--muted);font-size:14.5px}
 .step .api{font-family:var(--f-mono);font-size:12px;color:var(--indigo);background:var(--indigo-soft);border-radius:4px;padding:1px 6px;margin-left:6px;white-space:nowrap}
-.trigger{font-size:13px;color:var(--muted);border-left:3px solid var(--indigo);padding-left:12px}
+.trigger{font-size:13.5px;color:var(--muted);border-left:3px solid var(--indigo);padding-left:12px}
 
 /* Tables */
 .tbl{overflow-x:auto}
@@ -93,35 +99,49 @@ table{border-collapse:collapse;width:100%;font-size:14.5px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
 th{font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:700}
 td:first-child{white-space:nowrap}
+td.wrap{white-space:normal;min-width:180px}
 
 /* Two-col lists */
 .cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
-.box{border:1px solid var(--rule);border-radius:6px;padding:16px 18px}
+.box{border:1px solid var(--rule);border-radius:6px;padding:16px 18px;min-width:0}
 .box h3{font-family:var(--f-body);font-size:15px;font-weight:700;margin-bottom:8px}
-ul{margin:0;padding-left:1.2em;display:grid;gap:6px}
+ul,ol{margin:0;padding-left:1.2em;display:grid;gap:6px}
 li{font-size:14.5px}
 .yes h3{color:var(--ok)} .no h3{color:var(--unk)}
 
-/* Popup mock */
+/* Popup / card mocks */
+.mocks{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
 .popup{border:1px solid var(--rule);border-radius:8px;overflow:hidden;font-size:14px}
-.popup .ph{background:var(--warn-soft);color:var(--warn);padding:8px 14px;font-weight:700;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.popup .ph{background:var(--bad-soft);color:var(--bad);padding:8px 14px;font-weight:700;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .popup .pb{padding:14px;display:grid;gap:10px}
 .popup .lbl{font-size:12px;color:var(--muted);letter-spacing:.06em}
-.popup .src{background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;font-family:var(--f-mono);font-size:12.5px;line-height:1.8;overflow-x:auto;white-space:pre}
-.popup .src .hit{background:var(--warn-soft);color:var(--ink);font-weight:600}
+.src{background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;font-family:var(--f-mono);font-size:12.5px;line-height:1.8;overflow-x:auto;white-space:pre}
+.src .hit{background:var(--bad-soft);color:var(--ink);font-weight:600}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 .btn{font-size:12.5px;border:1px solid var(--rule);border-radius:4px;padding:3px 10px;color:var(--ink);background:var(--sheet)}
 .btn.p{border-color:var(--indigo);color:var(--indigo)}
+.answer{border:1px solid var(--rule);border-radius:8px;padding:14px;display:grid;gap:10px;font-size:14px}
+.answer .lbl{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.answer p{line-height:1.9}
+.inmark{font-size:12.5px;font-weight:700;border-radius:3px;padding:0 6px;margin-left:4px;white-space:nowrap}
+.inmark.bad{background:var(--bad-soft);color:var(--bad)} .inmark.ok{background:var(--ok-soft);color:var(--ok)}
+.card{border:1px solid var(--rule);border-radius:6px;background:var(--paper);padding:10px 12px;font-family:var(--f-mono);font-size:12.5px;line-height:1.75;overflow-x:auto;white-space:pre}
+.card .x{color:var(--bad);font-weight:600} .card .g{color:var(--ok);font-weight:600} .card .d{color:var(--muted)}
 
-.demo{display:grid;gap:10px;counter-reset:d}
-.demo li{list-style:none;position:relative;padding-left:0}
+/* Archive ladder */
+.ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.rung{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:grid;gap:4px;align-content:start}
+.rung b{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.rung p{font-size:14px}
+
 footer{color:var(--muted);font-size:12.5px;text-align:center}
 
+@media (max-width:860px){ .marks{grid-template-columns:repeat(2,minmax(0,1fr))} .mocks{grid-template-columns:1fr} }
 @media (max-width:760px){
   .hero{grid-template-columns:1fr}
   .seal{width:100px;height:100px;font-size:20px;justify-self:start}
   .sec{grid-template-columns:1fr}
-  .verdicts,.feats,.cols{grid-template-columns:1fr}
+  .feats,.cols,.ladder{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:no-preference){
   .seal{animation:stamp .5s ease-out .2s both}
@@ -130,16 +150,15 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
 </style>
 </head>
 <body>
-
 <div class="wrap">
 
 <section class="hero">
   <div>
     <div class="eyebrow">CLAUDE CODE MOD</div>
-    <h1>ウラ取り<small>uradori v0.4.0</small></h1>
+    <h1>ウラ取り<small>uradori v0.12.0</small></h1>
     <p class="lead">AIの「根拠あります」に、原文で検印を押す。</p>
-    <p class="sub">Claude が回答で出典（プロジェクト内のファイルやウェブページ）を挙げると、mod 自身がその原文を読みに行き、主張と食い違っていないかを確かめます。結果は入力欄の上の帯に出て、原文の該当行を見ながら人が最終判断できます。</p>
-    <div class="meta"><span class="chip">MIT License</span><span class="chip">Claude Code v2.1.287+</span><span class="chip">判定モデル: haiku</span><span class="chip">テスト 28件</span><a class="chip" href="install.html">導入ガイド →</a></div>
+    <p class="sub">Claude が回答で出典（プロジェクト内のファイルやウェブページ）を挙げると、mod 自身がその原文を読みに行き、主張と食い違っていないかを確かめます。結果は入力欄の上の帯と回答の本文に印で出て、原文の該当行を見ながら人が最終判断できます。</p>
+    <div class="meta"><span class="chip">MIT License</span><span class="chip">Claude Code v2.1.287+</span><span class="chip">判定モデル: haiku</span><span class="chip">テスト 82件</span><a class="chip" href="install.html">導入ガイド →</a></div>
   </div>
   <div class="seal" aria-hidden="true"><div>原文<br>確認<span>URADORI</span></div></div>
 </section>
@@ -148,34 +167,54 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
   <header><h2>できること</h2><p>入れておくだけで、出典つきの回答が終わるたびに自動でチェックします。</p></header>
   <div class="body">
     <div class="term" role="img" aria-label="入力欄の上に出る帯の例"><span class="d">─── 入力欄の上の帯 ───────────────────────────────</span>
-🔍 ウラ取り <span class="g">✔ 0</span>  <span class="w">⚠ 2</span>  ✖ 0   <span class="b">原文を見る</span> <span class="b">訂正させる</span> <span class="b">×</span>
-  <span class="w">⚠</span> 主張: タイムアウトは30秒です
+🔍 ウラ取り <span class="g">✔ 0</span>  <span class="x">✖ 2</span>  ？ 0   <span class="b">原文を見る</span> <span class="b">訂正させる</span> <span class="b">×</span>
+  <span class="x">✖</span> 主張: タイムアウトは30秒です
     原文 src/config.ts L3: <span class="h">timeout: 60_000, // ミリ秒</span></div>
 
-    <div class="verdicts">
+    <div class="marks">
       <div class="v ok"><b>✔</b><strong>一致</strong><p>原文にも同じことが書いてある</p></div>
-      <div class="v warn"><b>⚠</b><strong>食い違い</strong><p>数値・条件が違う、否定されている など</p></div>
-      <div class="v unk"><b>✖</b><strong>確認できない</strong><p>記述がない、取得に失敗、読まない設定のファイル</p></div>
+      <div class="v bad"><b>✖</b><strong>食い違い</strong><p>数値・条件が違う、否定されている など。いちばん重い印</p></div>
+      <div class="v drift"><b>△</b><strong>引用ずれ</strong><p>添えた引用が原文に一字一句はないが、内容は食い違っていない</p></div>
+      <div class="v unk"><b>？</b><strong>確認できない</strong><p>記述がない、取得に失敗、時間切れ、読まない設定のファイル</p></div>
+      <div class="v sub"><b>🔒</b><strong>アクセス拒否</strong><p>ボット対策などで取得できず、Web Archive にもない</p></div>
+      <div class="v sub"><b>📄</b><strong>PDF</strong><p>自動では読めない。自分で開くリンクと［別の出典を探させる］</p></div>
+      <div class="v sub"><b>⏸</b><strong>保留</strong><p>社内アドレスや秘密らしい値を含む URL。押したときだけ取りに行く</p></div>
+      <div class="v sub"><b>⚪</b><strong>根拠なし</strong><p>根拠を求めたのに URL がない／出典が名前だけ</p></div>
     </div>
+    <p class="legend">件数は帯・ホバーのカード・<code>/uradori</code> で同じ数え方です。✔ ✖ ？ はいつも、△ ⏸ 🔒 📄 はあるときだけ出ます（⏸ 🔒 📄 は ？ に含めません）。</p>
 
-    <div class="feats">
-      <div class="feat"><h3>原文ポップアップ</h3><p>実際のページやファイルの該当箇所を前後の文脈ごと表示し、根拠の行を ▶ で強調します。⚠ が見つかると自動で開きます（キー入力は奪いません）。</p></div>
-      <div class="feat"><h3>実サイトへのハイライトリンク</h3><p>ブラウザのテキストフラグメント（<code>#:~:text=…</code>）付きリンクで、実際のサイトがその文までスクロールしハイライトされた状態で開きます。</p></div>
-      <div class="feat"><h3>ワンクリックで訂正依頼</h3><p>［訂正させる］で原文の抜粋つきで Claude に訂正を頼みます。訂正後の回答もまた自動でウラ取りされます。</p></div>
-      <div class="feat"><h3>スラッシュコマンド</h3><p><code>/uradori</code> で結果を開く。番号指定、再チェック、オン／オフの切り替えもできます（下の表）。</p></div>
-    </div>
-
-    <div class="popup" aria-label="原文ポップアップの例">
-      <div class="ph"><span>⚠ 原文と食い違い</span><span class="mono">2 / 2</span></div>
-      <div class="pb">
-        <div><div class="lbl">CLAUDE の主張</div>「1回のリクエストで取得できるのは最大100件です」</div>
-        <div><div class="lbl">実際のページ：APIの利用制限 | サンプルAPIドキュメント</div>
+    <div class="mocks">
+      <div class="popup" aria-label="原文ポップアップの例">
+        <div class="ph"><span>✖ 原文と食い違い</span><span class="mono">2 / 2</span></div>
+        <div class="pb">
+          <div><div class="lbl">CLAUDE の主張</div>「1回のリクエストで取得できるのは最大100件です」</div>
+          <div><div class="lbl">実際のページ：APIの利用制限 | サンプルAPIドキュメント</div>
 <div class="src">  取得件数
 <span class="hit">▶ 1回のリクエストで取得できるのは最大50件です。</span>
   それより多く取得したい場合は…</div></div>
-        <a href="#how">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</a>
-        <div class="btns"><span class="btn p">この主張を訂正させる</span><span class="btn">← 前</span><span class="btn">次 →</span><span class="btn">閉じる</span></div>
+          <span style="color:var(--indigo)">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</span>
+          <div class="btns"><span class="btn p">この主張を訂正させる</span><span class="btn">← 前</span><span class="btn">次 →</span><span class="btn">閉じる</span></div>
+        </div>
       </div>
+      <div class="answer" aria-label="回答の本文に付く印とホバーのカードの例">
+        <div class="lbl">回答の本文（印は表示だけで、保存された回答は変わらない）</div>
+        <p>タイムアウトは30秒です（根拠：src/config.ts）。<span class="inmark bad">✖ 原文と違う</span><br>リトライは3回です（src/config.ts:3）。<span class="inmark ok">✔</span></p>
+        <div class="lbl">本文にマウスを乗せると出る原文カード</div>
+<div class="card">🔍 ウラ取り <span class="g">✔ 1</span>  <span class="x">✖ 1</span>  ？ 0
+<span class="x">✖</span> タイムアウトは30秒です
+  <span class="d">▶ src/config.ts L2:</span> timeout: 60_000,
+<span class="g">✔</span> リトライは3回です
+  <span class="d">▶ src/config.ts L3:</span> retries: 3,</div>
+      </div>
+    </div>
+
+    <div class="feats">
+      <div class="feat"><h3>原文ポップアップ</h3><p>実際のページやファイルの該当箇所を前後の文脈ごと表示し、根拠の行を ▶ で強調します。✖ が出たときはダイアログで自動で開きます（Esc で閉じる）。入力中ならキー入力を奪わず横に開くだけ。ターミナルが144桁未満と狭いときはトーストで知らせます。</p></div>
+      <div class="feat"><h3>回答の本文に印<span class="new">NEW</span></h3><p>チェックした文の後ろに 🔍 → ✔ / ✖ が付き、マウスを乗せると原文カードが重なって出ます。印は最近の10回答ぶん残ります。スマートフォンでは印だけ。</p></div>
+      <div class="feat"><h3>根拠モード<span class="new">NEW</span></h3><p>質問に「根拠」「出典」「一次情報」「エビデンス」などがあると、Claude にだけ見える指示（URL かファイルパスで書く、一次情報と HTML を優先、引用を「」で添える）を添えて送ります。帯に「🔍 根拠モードで送信」と出ます。</p></div>
+      <div class="feat"><h3>引用の一字一句照合<span class="new">NEW</span></h3><p>「」の引用や URL のテキストフラグメントは、モデルを使わずに原文と照合します。空白・全角半角の差は無視、「…」の省略にも対応。内容は合っているのに引用だけ合わないものは △ に分けます。</p></div>
+      <div class="feat"><h3>実サイトへのハイライトリンク</h3><p>テキストフラグメント（<code>#:~:text=…</code>）付きリンクで、実際のサイトがその文までスクロールしハイライトされた状態で開きます（Chrome・Edge・Safari など）。</p></div>
+      <div class="feat"><h3>ワンクリックで直させる</h3><p>［訂正させる］は原文の抜粋つきで訂正を依頼。🔒 📄 には［別の出典を探させる］、⚪ には［一次情報で裏付けさせる］。直した回答もまた自動でウラ取りされます。</p></div>
     </div>
 
     <div class="tbl"><table>
@@ -185,8 +224,43 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
         <tr><td><code>/uradori 2</code></td><td>2件目の主張の原文を開く</td></tr>
         <tr><td><code>/uradori recheck</code></td><td>直前の回答をもう一度チェックする</td></tr>
         <tr><td><code>/uradori off</code> / <code>on</code></td><td>自動チェックを止める／再開する</td></tr>
+        <tr><td><code>/uradori strict</code></td><td>毎回の回答をウラ取り対象にする（もう一度で元に戻す）</td></tr>
+        <tr><td><code>/uradori why</code></td><td>直前の回答をウラ取りした／しなかった理由を表示する</td></tr>
+        <tr><td><code>/uradori archive off</code> / <code>on</code></td><td>アクセス拒否のときに Web Archive を使わない／使う（既定: 使う）</td></tr>
+        <tr><td><code>/uradori popup off</code> / <code>on</code></td><td>✖ のとき原文ポップアップを自動で開かない／開く（既定: 開く）</td></tr>
       </tbody>
     </table></div>
+  </div>
+</section>
+
+<section class="sec">
+  <header><h2>いつ発動するか</h2><p>質問に根拠を求める言葉があるかどうかで動きが変わります。</p></header>
+  <div class="body">
+    <div class="tbl"><table>
+      <thead><tr><th>質問</th><th>回答</th><th>動き</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap" rowspan="3">根拠を求める言葉がある<br><span class="legend">根拠・出典・一次情報・ソース・裏付け・エビデンス・原典・ファクトチェック・cite など</span></td><td>URL・ファイルの出典あり</td><td class="wrap">原文でチェック → ✔ ✖ △ ？（数値・日付・規格などの主張から先に確認）</td></tr>
+        <tr><td>出典が名前だけ</td><td class="wrap">帯に <code>⚪ URLなしの出典 n件</code> と［一次情報で裏付けさせる］</td></tr>
+        <tr><td>出典なし</td><td class="wrap">帯に <code>⚪ 根拠が示されていません</code> と［一次情報で裏付けさせる］</td></tr>
+        <tr><td class="wrap" rowspan="2">根拠を求める言葉がない</td><td>URL・ファイルの出典あり</td><td class="wrap">原文でチェック</td></tr>
+        <tr><td>出典なし</td><td class="wrap">何もしない</td></tr>
+      </tbody>
+    </table></div>
+    <p class="legend">「ソースコード」や数式の「公式」では発動しません。入力した文そのものは変わらず、根拠モードの印はそのターンかぎりです。</p>
+    <div class="cols">
+      <div class="box yes"><h3>✔ チェックする書き方</h3><ul>
+        <li><code>タイムアウトは60秒です（根拠：src/config.ts）</code></li>
+        <li><code>根拠は src/config.ts の3行目です</code>（直前の文が主張）</li>
+        <li><code>docs/spec.md によると、〜です</code></li>
+        <li>回答末尾の参考リンク、「設定は src/config.ts にあります」</li>
+        <li>行番号つき（<code>src/config.ts:12</code>、<code>docs/a.md#L5</code>）</li>
+      </ul></div>
+      <div class="box no"><h3>— チェックしない書き方</h3><ul>
+        <li>「<code>config.ts</code> を修正しました」のような作業の報告</li>
+        <li>質問文</li>
+        <li><code>example.com</code> のようなドメイン名だけ、<code>1.2.3</code> のようなバージョン番号</li>
+      </ul></div>
+    </div>
   </div>
 </section>
 
@@ -203,18 +277,23 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
 </section>
 
 <section class="sec" id="how">
-  <header><h2>仕組み</h2><p>回答が終わった瞬間から、Claude を止めずに裏で動きます。</p></header>
+  <header><h2>仕組み</h2><p>質問を送るときと、回答が終わったときの2か所で動きます。</p></header>
   <div class="body">
-    <p class="trigger">きっかけ：Claude の回答が完了する（<code>turn.complete</code> イベント）。サブエージェントの回答や空の回答は対象外。<code>$.clock.after(0, …)</code> で処理を後回しにし、会話の進行をブロックしません。</p>
+    <p class="trigger">送信時（<code>prompt.submit</code>）：根拠を求める言葉があれば、Claude にだけ見える指示を質問に添えます。<br>回答完了時（<code>turn.complete</code>）：<code>$.clock.after(0, …)</code> で処理を後回しにし、Claude を止めずに裏でチェックを始めます。サブエージェントの回答や空の回答は対象外です。</p>
     <div class="flow">
-      <div class="step"><div></div><div><h3>出典を拾い、主張と対にする<span class="api">正規表現 + $.model</span></h3><p>かっこ内の出典、「〜によると」「根拠は〜」などの書き方は文から直接取り出します。末尾の参考リンクのように対応が曖昧なものは、モデルに主張と出典を対にさせます。行番号（<code>:12</code>、<code>#L5</code>）も読みます。</p></div></div>
-      <div class="step"><div></div><div><h3>原文を mod 自身が取りに行く<span class="api">$.fs / $.http</span></h3><p>ファイルはプロジェクト内かどうか、秘密情報らしい名前でないかを確かめてから読みます。URL は HTML を本文テキストに変換し、ページタイトルも取ります。</p></div></div>
-      <div class="step"><div></div><div><h3>関係する行を選ぶ</h3><p>原文が 24,000 文字以内ならまるごと。大きいときは主張のキーワード（<code>60_000</code>→<code>60000</code> のように正規化）と行番号を手がかりに抜粋します。</p></div></div>
-      <div class="step"><div></div><div><h3>まっさらなモデルで判定<span class="api">$.model.complete (haiku)</span></h3><p>会話履歴のない呼び出しに、主張・出典・行番号つき原文だけを渡し、match / mismatch / unknown と根拠行番号（最大3つ）を JSON で返させます。単位換算や表記揺れは同じ値として扱います。</p></div></div>
-      <div class="step"><div></div><div><h3>帯とポップアップに表示<span class="api">ui.render / $.ui.open</span></h3><p>表示する抜粋は判定モデルの言葉ではなく、原文の行そのもの。⚠ があればトーストで知らせ、ポップアップを自動で開きます。</p></div></div>
-      <div class="step"><div></div><div><h3>ハイライトリンクを作る</h3><p>URL の場合、根拠の文からテキストフラグメント付きリンクを作ります。80文字を超える文は先頭と末尾の24文字で範囲指定します。</p></div></div>
+      <div class="step"><div></div><div><h3>出典を拾い、主張と対にする<span class="api">正規表現 + $.model</span></h3><p>かっこ内の出典、「〜によると」「根拠は〜」などは文から直接取り出します。末尾の参考リンクのように対応が曖昧なものは、モデルに主張と出典を対にさせます。数値・日付・規格などの主張を先に確認します。</p></div></div>
+      <div class="step"><div></div><div><h3>原文を mod 自身が取りに行く<span class="api">$.fs / $.http</span></h3><p>ファイルはプロジェクト内で秘密情報らしい名前でないものだけ。URL は社内アドレスや秘密らしい値を含むものを ⏸ にして送り出さず、それ以外をブラウザと同じヘッダーで取得します（1回15秒まで）。</p></div></div>
+      <div class="step"><div></div><div><h3>拒否されたら Web Archive<span class="api">web.archive.org</span></h3><p>403・429 やボット確認のページなら、Web Archive の最新の保存版で確かめます。保存版もなければ 🔒 です。</p></div></div>
+      <div class="step"><div></div><div><h3>引用を一字一句照合し、関係する行を選ぶ</h3><p>「」の引用があればモデルを使わずに原文と照合します。原文が大きいときは主張のキーワード（<code>60_000</code>→<code>60000</code> のように正規化）と行番号を手がかりに抜粋します。</p></div></div>
+      <div class="step"><div></div><div><h3>まっさらなモデルで判定<span class="api">$.model.complete (haiku)</span></h3><p>会話履歴のない呼び出しに主張・出典・行番号つき原文だけを渡し、一致／食い違い／確認できないと根拠の行番号を返させます（30秒まで）。根拠の行を示せなければ ？ にします。</p></div></div>
+      <div class="step"><div></div><div><h3>帯・本文・ポップアップに表示<span class="api">ui.render / $.ui.open</span></h3><p>抜粋は判定モデルの言葉ではなく原文の行そのもの。URL には根拠の文を使ったテキストフラグメント付きリンクを作ります。✖ があればポップアップを開きます。</p></div></div>
     </div>
-    <p>1回の回答でチェックする主張は最大6件。判定モデルは <code>hooks/register.tsx</code> の <code>JUDGE_MODEL</code>（既定 <code>haiku</code>）で、精度を上げたいときは <code>sonnet</code> に変えられます。</p>
+    <div class="ladder" aria-label="アクセス拒否のページへの対処">
+      <div class="rung"><b>1. まず</b><p>ブラウザと同じヘッダーで取りに行く</p></div>
+      <div class="rung"><b>2. 拒否されたら</b><p>Web Archive の最新の保存版で確認。ポップアップに「📦 Web Archive 2026-04-25 の保存版で確認」のように出る</p></div>
+      <div class="rung"><b>3. それもなければ</b><p>🔒。［別の出典を探させる］か、自分のブラウザで開いて確かめる</p></div>
+    </div>
+    <p>1回の回答でチェックする主張は最大6件、主張1件ぜんぶで60秒まで。時間を過ぎたものやリロードで途中になったものは ？ にして、帯が「確認中」のまま残らないようにしています。判定モデルは <code>hooks/register.tsx</code> の <code>JUDGE_MODEL</code>（既定 <code>haiku</code>）で、<code>sonnet</code> に変えると精度が上がります。</p>
   </div>
 </section>
 
@@ -225,37 +304,21 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
       <thead><tr><th>mod の機能</th><th>ウラ取りでの使い方</th></tr></thead>
       <tbody>
         <tr><td><code>session.start</code></td><td>セッション開始時に <code>/uradori</code> コマンドを登録</td></tr>
+        <tr><td><code>prompt.submit</code></td><td>根拠を求める質問に、Claude にだけ見える指示（context）を添える</td></tr>
         <tr><td><code>turn.complete</code></td><td>回答完了をきっかけに、裏でチェックを開始</td></tr>
-        <tr><td><code>command.run</code></td><td><code>/uradori</code> の引数（番号・recheck・on/off）を処理</td></tr>
-        <tr><td><code>ui.render</code>（AbovePrompt）</td><td>入力欄の上に結果の帯を描く。アンケート表示中は譲る</td></tr>
-        <tr><td><code>$.ui.open</code> / <code>toast</code></td><td>原文ポップアップと通知。開けない画面では文字表示に切り替え</td></tr>
+        <tr><td><code>command.run</code></td><td><code>/uradori</code> の引数（番号・recheck・strict・why・archive・popup など）を処理</td></tr>
+        <tr><td><code>ui.render</code>（AbovePrompt）</td><td>入力欄の上の帯。根拠モードの表示もここ。アンケート表示中は譲る</td></tr>
+        <tr><td><code>ui.render</code>（AssistantMessage）</td><td>回答の本文に印を付け、ホバーで原文カードを重ねる</td></tr>
+        <tr><td><code>ui.render</code>（Pane）+ <code>$.ui.open</code></td><td>原文ポップアップ。✖ のときはダイアログで開く</td></tr>
         <tr><td><code>$.fs</code> / <code>$.http</code></td><td>原文を直接読む。Claude の要約を経由しない</td></tr>
         <tr><td><code>$.model.complete</code></td><td>主張と出典の対応付け、および独立した判定</td></tr>
-        <tr><td><code>atom</code>（状態）</td><td>結果・選択中の主張・オン/オフ・自動ポップアップ・帯の非表示を保持</td></tr>
+        <tr><td><code>$.prompt.submit</code></td><td>［訂正させる］［別の出典を探させる］［一次情報で裏付けさせる］の依頼を送る</td></tr>
+        <tr><td><code>atom</code>（状態）</td><td>結果の履歴（10回答ぶん）、オン/オフ、strict、Archive、自動ポップアップの設定を保持</td></tr>
       </tbody>
     </table></div>
     <div class="cols">
       <div class="box"><h3>表示される場所</h3><ul><li>ターミナル版 Claude Code</li><li>デスクトップアプリの Code タブ</li><li>VS Code 拡張</li><li>claude.ai のチャットやクラウドでは、動いても描く画面がないため見えません</li></ul></div>
-      <div class="box"><h3>構成</h3><ul><li><code>hooks/register.tsx</code> … イベント処理と UI（約570行）</li><li><code>hooks/logic.ts</code> … 出典抽出・抜粋・判定プロンプトなど純粋なロジック（約600行）</li><li><code>tests/</code> … 抽出、表示（terminal / desktop / vscode / mobile）、フェイルセーフなど28件</li></ul></div>
-    </div>
-  </div>
-</section>
-
-<section class="sec">
-  <header><h2>対象になる書き方</h2><p>作業報告や質問はチェックしないことで、利用量と誤報を抑えています。</p></header>
-  <div class="body">
-    <div class="cols">
-      <div class="box yes"><h3>✔ チェックする</h3><ul>
-        <li><code>タイムアウトは60秒です（根拠：src/config.ts）</code></li>
-        <li><code>根拠は src/config.ts の3行目です</code>（直前の文が主張）</li>
-        <li><code>docs/spec.md によると、〜です</code></li>
-        <li>回答末尾の参考リンク、「設定は src/config.ts にあります」</li>
-      </ul></div>
-      <div class="box no"><h3>— チェックしない</h3><ul>
-        <li>「<code>config.ts</code> を修正しました」のような作業の報告</li>
-        <li>質問文</li>
-        <li><code>example.com</code> のようなドメイン名だけ、<code>1.2.3</code> のようなバージョン番号</li>
-      </ul></div>
+      <div class="box"><h3>構成</h3><ul><li><code>hooks/register.tsx</code> … イベント処理と UI（約1,160行）</li><li><code>hooks/logic.ts</code> … 出典抽出・URL の安全判定・引用照合・判定プロンプトなど純粋なロジック（約1,050行）</li><li><code>tests/</code> … 表示（terminal / desktop / vscode / mobile）、引用照合、時間切れ、保留 URL など82件</li></ul></div>
     </div>
   </div>
 </section>
@@ -267,14 +330,16 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
       <div class="box"><h3>安全のために</h3><ul>
         <li>読むのはプロジェクト内のファイルだけ（シンボリックリンクの行き先も確認）</li>
         <li><code>.env</code>、<code>*.pem</code>、<code>id_rsa</code>、<code>credentials</code> など秘密情報らしいファイルは読まない</li>
-        <li>2MB超・バイナリのファイルは読まない</li>
-        <li>取得や判定に失敗したものは必ず ✖。✔ にはしない</li>
-        <li>主張と原文の抜粋を、セッションと同じアカウントの haiku に送る</li>
+        <li><code>localhost</code>・プライベート IP・<code>.internal</code> などの社内アドレス、<code>token=</code> などを含む URL は自動で取りに行かず ⏸（リダイレクト先も同じ）。読んだページに仕込まれた指示で秘密を送らされるのを防ぐため</li>
+        <li>失敗・時間切れ・根拠の行を示せない判定は必ず ？。✔ にはしない</li>
+        <li>主張と原文の抜粋をセッションと同じアカウントの haiku に、URL だけを Web Archive に送る（会話は送らない。<code>/uradori archive off</code> で止められる）</li>
         <li>mod はサンドボックスの外であなたの権限で動く。会社 PC では社内ルールを確認</li>
       </ul></div>
       <div class="box"><h3>限界</h3><ul>
         <li>確かめるのは「出典にそう書いてあるか」。出典自体の正しさは分からない（古いドキュメントにも ✔ が付く）</li>
-        <li>ログインが必要なページ、PDF、JavaScript で描画されるページは読めない</li>
+        <li>ログインが必要なページ、JavaScript で描画されるページは読めない（？）</li>
+        <li>PDF は読めない（📄）。根拠モードでは HTML を優先するよう Claude に伝える</li>
+        <li>ホスト名を DNS で引いた先が社内 IP かどうかまでは確かめられない</li>
         <li>判定もモデルなので間違えることがある。だから原文の行を必ず並べて見せる</li>
       </ul></div>
     </div>
@@ -284,7 +349,8 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
 <section class="sec">
   <header><h2>導入とデモ</h2><p>約60秒で「古いドキュメント」を見抜く様子を試せます。</p></header>
   <div class="body">
-    <div class="term">claude --plugin-dir ~/mods/uradori      <span class="d"># このセッションだけ試す</span>
+    <div class="term">git clone https://github.com/yui-taro/uradori ~/mods/uradori
+claude --plugin-dir ~/mods/uradori      <span class="d"># このセッションだけ試す</span>
 
 <span class="d">// ~/.claude/settings.json に書くと毎回読み込む</span>
 { "env": { "CLAUDE_CODE_PLUGIN_DIRS": "~/mods/uradori" } }
@@ -295,13 +361,13 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
     <div class="flow">
       <div class="step"><div></div><div><h3>ドキュメントだけで答えさせる</h3><p>「docs/spec.md を読んで、タイムアウトとリトライ回数を教えて。どのファイルで設定されているかも書いて。コードは開かず答えて」</p></div></div>
       <div class="step"><div></div><div><h3>Claude が古い情報で回答</h3><p>「タイムアウトは30秒、リトライは3回。どちらも <code>src/config.ts</code> で設定」</p></div></div>
-      <div class="step"><div></div><div><h3>1〜2秒後に ⚠ 1 / ✔ 1</h3><p>ポップアップが開き、<code>src/config.ts</code> の3行目 <code>timeout: 60_000</code> が ▶ で強調される。人はファイルを開いていません。</p></div></div>
+      <div class="step"><div></div><div><h3>数秒後に ✖ 1 / ✔ 1</h3><p>本文の文末に印が付き、原文ポップアップが自動で開く。<code>src/config.ts</code> の3行目 <code>timeout: 60_000</code> が ▶ で強調されている。人はファイルを開いていません。</p></div></div>
       <div class="step"><div></div><div><h3>［訂正させる］</h3><p>Claude が config.ts を開き直して「60秒でした。ドキュメントが古いです」と訂正し、帯が ✔ に変わります。</p></div></div>
     </div>
   </div>
 </section>
 
-<footer>出典：uradori v0.4.0 の README.md とソースコード（hooks/register.tsx, hooks/logic.ts）</footer>
+<footer>出典：uradori v0.12.0 の README.md とソースコード（hooks/register.tsx, hooks/logic.ts）· <a href="https://github.com/yui-taro/uradori">github.com/yui-taro/uradori</a></footer>
 </div>
 </body>
 </html>
