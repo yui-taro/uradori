@@ -158,7 +158,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
     <h1>ウラ取り<small>uradori v0.12.0</small></h1>
     <p class="lead">AIの「根拠あります」に、原文で検印を押す。</p>
     <p class="sub">Claude が回答で出典（プロジェクト内のファイルやウェブページ）を挙げると、mod 自身がその原文を読みに行き、主張と食い違っていないかを確かめます。結果は入力欄の上の帯と回答の本文に印で出て、原文の該当行を見ながら人が最終判断できます。</p>
-    <div class="meta"><span class="chip">MIT License</span><span class="chip">Claude Code v2.1.287+</span><span class="chip">判定モデル: haiku</span><span class="chip">テスト 82件</span><a class="chip" href="install.html">導入ガイド →</a></div>
+    <div class="meta"><span class="chip">MIT License</span><span class="chip">Claude Code v2.1.287+</span><span class="chip">判定モデル: haiku</span><span class="chip">テスト 82件</span><a class="chip" href="install.html">導入ガイド →</a><a class="chip" href="demo.html">ブラウザで体験 →</a></div>
   </div>
   <div class="seal" aria-hidden="true"><div>原文<br>確認<span>URADORI</span></div></div>
 </section>
@@ -357,6 +357,7 @@ claude --plugin-dir ~/mods/uradori      <span class="d"># このセッション�
 
 /plugin   <span class="d"># → 1 mod active · uradori</span></div>
     <p>入手から動作確認・更新・うまくいかないときまでの詳しい手順は <a href="install.html">導入ガイド</a> にまとめています。</p>
+    <p>Claude Code がない環境でも、<a href="demo.html">ブラウザで触れる体験デモ</a>で流れを試せます（動きを再現したもので、実際の判定はしません）。</p>
     <p><code>demo/</code> には、<code>docs/spec.md</code> に「タイムアウト30秒」と書かれているのに、実際の <code>src/config.ts</code> は <code>timeout: 60_000</code>（60秒）という、ドキュメントが古いプロジェクトが入っています。</p>
     <div class="flow">
       <div class="step"><div></div><div><h3>ドキュメントだけで答えさせる</h3><p>「docs/spec.md を読んで、タイムアウトとリトライ回数を教えて。どのファイルで設定されているかも書いて。コードは開かず答えて」</p></div></div>

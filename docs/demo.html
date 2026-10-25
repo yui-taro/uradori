@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ウラ取り 体験デモ</title>
+<meta name="description" content="Claude Code の mod「ウラ取り（uradori）」が回答の根拠を原文で確かめる流れを、ブラウザで触って体験できる再現デモ">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+/* Layout: a mock Claude Code window on the left (chat, band, input, source popup), a step guide and legend on the right; stacks on phones */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --fg: #1b2430;
+  --muted: #5b6878;
+  --line: #d6dde6;
+  --accent: #22407a;
+  --accent-soft: #e2e9f6;
+  --win: #ffffff;
+  --win-bar: #f3f5f8;
+  --user-bubble: #e9eef6;
+  --code-bg: #f4f6fa;
+  --hit: #fdecea;
+  --ok: #1f7a4d; --ok-bg: #e2f2e9;
+  --ng: #b3261e; --ng-bg: #fbe5e3;
+  --ck: #8a6100; --ck-bg: #f6edd6;
+  --shadow: 0 18px 40px -18px rgba(20, 35, 60, 0.35);
+  --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141c; --surface: #172030; --fg: #e3e8f0; --muted: #9aa6b8; --line: #2a3446;
+    --accent: #8fb0ef; --accent-soft: #1e2a42; --win: #141b27; --win-bar: #1a2332; --user-bubble: #202c40;
+    --code-bg: #10161f; --hit: #3a1f1d;
+    --ok: #5fcf95; --ok-bg: #15322a; --ng: #ff8a80; --ng-bg: #3a1d1c; --ck: #e6b955; --ck-bg: #342b15;
+    --shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141c; --surface: #172030; --fg: #e3e8f0; --muted: #9aa6b8; --line: #2a3446;
+  --accent: #8fb0ef; --accent-soft: #1e2a42; --win: #141b27; --win-bar: #1a2332; --user-bubble: #202c40;
+  --code-bg: #10161f; --hit: #3a1f1d;
+  --ok: #5fcf95; --ok-bg: #15322a; --ng: #ff8a80; --ng-bg: #3a1d1c; --ck: #e6b955; --ck-bg: #342b15;
+  --shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.page { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+
+/* head */
+.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+.head h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.7rem, 4.5vw, 2.4rem); margin: 0; line-height: 1.3; text-wrap: balance; }
+.head p { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+.notice { font-size: 0.82rem; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: 6px; padding: 4px 10px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 6px 14px; border-radius: 999px; font-size: 0.9rem; }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+@media (max-width: 880px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* window */
+.win { position: relative; background: var(--win); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; height: 640px; overflow: hidden; min-width: 0; }
+@media (max-width: 560px) { .win { height: 620px; } }
+.bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--win-bar); border-bottom: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); }
+.dots { display: flex; gap: 6px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.bar .path { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bar .mod { margin-left: auto; white-space: nowrap; }
+
+.log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.empty { margin: auto; text-align: center; color: var(--muted); font-size: 0.9rem; max-width: 34ch; }
+.msg { display: flex; flex-direction: column; gap: 4px; max-width: 92%; min-width: 0; }
+.msg .who { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.06em; }
+.msg.user { align-self: flex-end; }
+.msg.user .body { background: var(--user-bubble); border-radius: 12px 12px 2px 12px; padding: 10px 14px; }
+.msg.claude .body { padding: 2px 0; position: relative; }
+.msg.system .body { font-size: 0.82rem; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+.sent { display: inline; }
+.mk { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; font-weight: 700; padding: 0 7px; border-radius: 5px; margin-left: 6px; white-space: nowrap; vertical-align: 1px; transition: background-color .3s, color .3s; }
+.mk.ck { background: var(--ck-bg); color: var(--ck); }
+.mk.ok { background: var(--ok-bg); color: var(--ok); }
+.mk.ng { background: var(--ng-bg); color: var(--ng); }
+.caret::after { content: "▍"; color: var(--accent); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* band */
+.band { border-top: 1px solid var(--line); background: var(--win-bar); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem; }
+.band-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.band-title { font-weight: 700; }
+.cnt { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.cnt.ok { color: var(--ok); } .cnt.ng { color: var(--ng); } .cnt.na { color: var(--muted); }
+.band-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.bbtn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 2px 10px; border-radius: 6px; font-size: 0.82rem; }
+.bbtn.primary { border-color: var(--ng); color: var(--ng); }
+.band-line { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+.band-line b { color: var(--ng); }
+
+/* input */
+.inputbox { border-top: 1px solid var(--line); padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.mode { font-size: 0.78rem; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 3px 10px; align-self: flex-start; }
+.compose { display: flex; gap: 10px; align-items: flex-end; }
+.compose textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 0.92rem; background: var(--surface); color: var(--fg); height: 74px; }
+.send { background: var(--accent); color: var(--surface); border: 0; border-radius: 10px; padding: 10px 18px; font-weight: 700; }
+.send:disabled { opacity: 0.45; cursor: default; }
+
+/* popup */
+.pop { position: absolute; inset: 44px 14px auto 14px; max-height: calc(100% - 58px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; z-index: 5; }
+.pop-head { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.pop-head .v { padding: 1px 9px; border-radius: 6px; }
+.v.ng { background: var(--ng-bg); color: var(--ng); }
+.v.ok { background: var(--ok-bg); color: var(--ok); }
+.pop-head .n { color: var(--muted); font-weight: 400; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.lbl { font-size: 0.74rem; color: var(--muted); letter-spacing: 0.06em; }
+.claim { font-size: 1rem; }
+.excerpt { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.8; overflow-x: auto; padding: 8px 0; }
+.excerpt.web { font-family: var(--font-body); font-size: 0.9rem; }
+.ln { display: grid; grid-template-columns: 22px 36px auto; padding: 0 12px 0 6px; white-space: pre; }
+.excerpt.web .ln { grid-template-columns: 22px auto; white-space: normal; }
+.ln .no { color: var(--muted); text-align: right; padding-right: 12px; font-variant-numeric: tabular-nums; }
+.ln .arrow { color: var(--ng); font-weight: 700; }
+.ln.hit { background: var(--hit); }
+.ln.hit.okhit .arrow { color: var(--ok); }
+.ln.hit.okhit { background: var(--ok-bg); }
+.srcline { font-size: 0.86rem; overflow-wrap: anywhere; }
+.openlink { align-self: flex-start; background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 0; font-size: 0.88rem; text-align: left; }
+.pop-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.pbtn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 5px 12px; border-radius: 7px; font-size: 0.86rem; }
+.pbtn.fix { background: var(--ng); border-color: var(--ng); color: var(--surface); font-weight: 700; }
+.pbtn:disabled { opacity: 0.4; cursor: default; }
+
+/* simulated browser */
+.browser { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.browser .addr { background: var(--win-bar); padding: 6px 10px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); overflow-wrap: anywhere; border-bottom: 1px solid var(--line); }
+.browser .pg { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
+.browser .pg h4 { margin: 0; font-size: 1rem; }
+.browser mark { background: #ffe58a; color: #1b2430; padding: 0 2px; }
+
+/* hover card */
+.hcard { position: absolute; z-index: 4; left: 0; top: calc(100% + 6px); width: min(420px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 10px 12px; font-size: 0.82rem; display: flex; flex-direction: column; gap: 6px; }
+.hcard .row { display: flex; flex-direction: column; }
+.hcard .src { font-family: var(--font-mono); color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+
+/* side */
+.side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.panel h2 { margin: 0; font-size: 0.95rem; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; counter-reset: s; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 10px; padding: 6px 0; color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+.steps li::before { content: counter(s); width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; margin-top: 1px; }
+.steps li.now { color: var(--fg); }
+.steps li.now::before { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.steps li.done::before { content: "✓"; border-color: var(--ok); color: var(--ok); }
+.steps b { display: block; color: inherit; }
+.legend { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 0.84rem; align-items: center; }
+.reset { align-self: flex-start; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 5px 14px; border-radius: 7px; font-size: 0.85rem; }
+.foot { font-size: 0.8rem; color: var(--muted); }
+.foot a { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) { .caret::after { animation: none; } .mk { transition: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="foot" aria-label="ページ"><a href="./">← ウラ取り ガイド</a>　<a href="install.html">導入ガイド</a></nav>
+  <div class="head">
+    <div>
+      <h1>ウラ取り 体験デモ</h1>
+      <p>Claude が出典つきで答えると、mod が原文を読みに行って食い違いを見つけます。下の画面で［送信］を押して流れを体験してください。</p>
+    </div>
+    <span class="notice">再現デモです。実際の原文取得やモデル判定はしていません</span>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="シナリオ">
+    <button class="tab" role="tab" id="tab-file" aria-selected="true" data-sc="file">古いドキュメント（ファイル）</button>
+    <button class="tab" role="tab" id="tab-web" aria-selected="false" data-sc="web">ウェブページの出典</button>
+  </div>
+
+  <div class="stage">
+    <div class="win" id="win">
+      <div class="bar">
+        <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="path" id="path">~/mods/uradori/demo</span>
+        <span class="mod">1 mod active · uradori</span>
+      </div>
+
+      <div class="log" id="log" aria-live="polite"></div>
+
+      <div class="band" id="band" hidden>
+        <div class="band-row">
+          <span class="band-title">🔍 ウラ取り</span>
+          <span id="band-counts"></span>
+          <span class="band-btns" id="band-btns">
+            <button class="bbtn" id="b-open">原文を見る</button>
+            <button class="bbtn primary" id="b-fix">訂正させる</button>
+            <button class="bbtn" id="b-close" aria-label="帯を閉じる">×</button>
+          </span>
+        </div>
+        <div class="band-line" id="band-line"></div>
+      </div>
+
+      <div class="inputbox">
+        <span class="mode" id="mode" hidden>🔍 根拠モードで送信（質問の「根拠」に反応）</span>
+        <div class="compose">
+          <textarea id="q" aria-label="質問" readonly></textarea>
+          <button class="send" id="send">送信</button>
+        </div>
+      </div>
+
+      <div class="pop" id="pop" role="dialog" aria-modal="false" aria-labelledby="pop-title" hidden></div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <h2>流れ</h2>
+        <ol class="steps" id="steps">
+          <li data-k="send"><span><b>質問を送る</b>「根拠」を含む質問なので、出典を書くよう Claude にだけ伝わる</span></li>
+          <li data-k="check"><span><b>回答を原文で確かめる</b>回答が終わると、mod が出典の原文を自分で読みに行く</span></li>
+          <li data-k="pop"><span><b>原文ポップアップを見る</b>✖ があると自動で開く。根拠の行に ▶</span></li>
+          <li data-k="fix"><span><b>訂正させる</b>原文の抜粋つきで Claude に訂正を頼む</span></li>
+          <li data-k="done"><span><b>訂正後もウラ取り</b>直した回答も自動で確かめて ✔</span></li>
+        </ol>
+        <button class="reset" id="reset">最初からやり直す</button>
+      </div>
+      <div class="panel">
+        <h2>印の意味</h2>
+        <div class="legend">
+          <span class="mk ck" style="margin:0">🔍</span><span>確認中</span>
+          <span class="mk ok" style="margin:0">✔</span><span>原文にも同じことが書いてある</span>
+          <span class="mk ng" style="margin:0">✖</span><span>原文と食い違う</span>
+          <span class="mk ck" style="margin:0">？</span><span>確認できない（このデモでは出ません）</span>
+        </div>
+        <p class="foot">PC では、回答の本文にマウスを乗せると原文のカードも出ます。</p>
+      </div>
+      <p class="foot">本物は Claude Code（ターミナル版・デスクトップアプリ・VS Code）で動きます。<a href="https://github.com/yui-taro/uradori">yui-taro/uradori</a></p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SCENARIOS = {
+    file: {
+      path: '~/mods/uradori/demo',
+      question: 'docs/spec.md を読んで、APIクライアントのタイムアウトとリトライ回数を教えて。根拠のファイルも書いて。コードは開かず、ドキュメントだけで答えて。',
+      lead: 'docs/spec.md によると、次のとおりです。',
+      claims: [
+        { text: 'タイムアウトは30秒です（根拠：src/config.ts）。', verdict: 'ng', hit: 3 },
+        { text: 'リトライは3回です（src/config.ts:4）。', verdict: 'ok', hit: 4 }
+      ],
+      source: {
+        kind: 'file', name: 'src/config.ts',
+        lines: [
+          '// APIクライアントの設定（2026年10月に見直し）',
+          'export const config = {',
+          '  timeout: 60_000, // ミリ秒',
+          '  retries: 3,',
+          "  baseUrl: 'https://api.example.com/v2',",
+          '}'
+        ]
+      },
+      fixRequest: 'ウラ取りの結果、「タイムアウトは30秒です」が src/config.ts の3行目「timeout: 60_000, // ミリ秒」と食い違っています。原文を開き直して訂正してください。',
+      fixLead: 'src/config.ts を開き直しました。docs/spec.md の記述（2025年4月）が古くなっています。',
+      fixClaims: [
+        { text: 'タイムアウトは60秒です（src/config.ts:3「timeout: 60_000」）。', verdict: 'ok', hit: 3 },
+        { text: 'リトライは3回です（src/config.ts:4）。', verdict: 'ok', hit: 4 }
+      ]
+    },
+    web: {
+      path: '~/projects/sample-client',
+      question: 'サンプルAPIで、1回のリクエストで取得できる件数の上限と、1分あたりのリクエスト上限を教えて。根拠のページも書いて。',
+      lead: '公式ドキュメントの「APIの利用制限」ページによると、次のとおりです。',
+      claims: [
+        { text: '1回のリクエストで取得できるのは最大100件です（出典: https://docs.example.com/limits の「取得件数」節）。', verdict: 'ng', hit: 2 },
+        { text: 'リクエストは1分あたり60回までです（同ページ「レート制限」節）。', verdict: 'ok', hit: 6 }
+      ],
+      source: {
+        kind: 'web', name: 'APIの利用制限 | サンプルAPIドキュメント', url: 'https://docs.example.com/limits',
+        lines: [
+          '## 取得件数',
+          '1回のリクエストで取得できるのは最大50件です。',
+          'それより多く取得したい場合は、ページ送り（cursor）を使ってください。',
+          '',
+          '## レート制限',
+          'リクエストは1分あたり60回までです。',
+          '超えた場合は 429 を返します。'
+        ]
+      },
+      fixRequest: 'ウラ取りの結果、「最大100件です」が https://docs.example.com/limits の「1回のリクエストで取得できるのは最大50件です。」と食い違っています。原文を確かめて訂正してください。',
+      fixLead: 'ページを確かめ直しました。先ほどの件数は誤りでした。',
+      fixClaims: [
+        { text: '1回のリクエストで取得できるのは最大50件です（出典: https://docs.example.com/limits の「取得件数」節「最大50件です」）。', verdict: 'ok', hit: 2 },
+        { text: 'リクエストは1分あたり60回までです（同ページ「レート制限」節）。', verdict: 'ok', hit: 6 }
+      ]
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const log = $('log'), band = $('band'), pop = $('pop'), q = $('q'), send = $('send'), mode = $('mode');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const canHover = matchMedia('(hover: hover)').matches;
+  const speed = reduced ? 0.15 : 1;
+
+  let sc = 'file';
+  let run = 0;            // bumps on reset so stale timers stop
+  let current = [];       // claims of the latest checked answer
+  let popIndex = 0;
+  let phase = 'send';
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms * speed));
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function setPhase(k) {
+    phase = k;
+    const order = ['send', 'check', 'pop', 'fix', 'done'];
+    const i = order.indexOf(k);
+    document.querySelectorAll('#steps li').forEach((li) => {
+      const j = order.indexOf(li.dataset.k);
+      li.classList.toggle('now', j === i && k !== 'done');
+      li.classList.toggle('done', j < i || k === 'done');
+    });
+  }
+
+  function reset() {
+    run++;
+    const s = SCENARIOS[sc];
+    log.innerHTML = '<p class="empty">［送信］を押すと、Claude が出典つきで答えます。<br>そのあと、ウラ取りが原文を確かめます。</p>';
+    band.hidden = true; pop.hidden = true; mode.hidden = true;
+    q.value = s.question; send.disabled = false;
+    $('path').textContent = s.path;
+    current = []; popIndex = 0;
+    setPhase('send');
+  }
+
+  function addMsg(who, html) {
+    const empty = log.querySelector('.empty'); if (empty) empty.remove();
+    const m = document.createElement('div');
+    m.className = 'msg ' + who;
+    const label = who === 'user' ? 'あなた' : who === 'claude' ? 'Claude' : 'ウラ取り → Claude';
+    m.innerHTML = `<span class="who">${label}</span><div class="body">${html}</div>`;
+    log.appendChild(m);
+    log.scrollTop = log.scrollHeight;
+    return m.querySelector('.body');
+  }
+
+  async function typeInto(el, text, my) {
+    el.classList.add('caret');
+    const step = reduced ? text.length : 2;
+    for (let i = 0; i < text.length; i += step) {
+      if (my !== run) return false;
+      el.textContent = text.slice(0, i + step);
+      log.scrollTop = log.scrollHeight;
+      await wait(22);
+    }
+    el.classList.remove('caret');
+    return my === run;
+  }
+
+  // Claude answers, then uradori checks each claim
+  async function answer(lead, claims, my) {
+    const body = addMsg('claude', '');
+    const leadEl = document.createElement('p'); leadEl.style.margin = '0 0 6px';
+    body.appendChild(leadEl);
+    if (!(await typeInto(leadEl, lead, my))) return null;
+    const sents = [];
+    for (const c of claims) {
+      const p = document.createElement('p'); p.style.margin = '0 0 4px';
+      const t = document.createElement('span'); t.className = 'sent';
+      p.appendChild(t); body.appendChild(p);
+      if (!(await typeInto(t, c.text, my))) return null;
+      sents.push(p);
+    }
+    return { body, sents };
+  }
+
+  async function check(res, claims, my) {
+    setPhase('check');
+    const marks = res.sents.map((p) => {
+      const mk = document.createElement('span'); mk.className = 'mk ck'; mk.textContent = '🔍 確認中';
+      p.appendChild(mk); return mk;
+    });
+    showBand(claims, true);
+    await wait(900);
+    // file and web sources: fetch original, then judge; numeric claims first
+    const order = claims.map((c, i) => i).sort((a, b) => (claims[b].verdict === 'ng') - (claims[a].verdict === 'ng'));
+    for (const i of order) {
+      await wait(800);
+      if (my !== run) return false;
+      const c = claims[i];
+      marks[i].className = 'mk ' + c.verdict;
+      marks[i].textContent = c.verdict === 'ng' ? '✖ 原文と違う' : '✔';
+      c.done = true;
+      showBand(claims, false);
+    }
+    attachHover(res.body, claims);
+    return true;
+  }
+
+  function counts(claims) {
+    const ok = claims.filter((c) => c.done && c.verdict === 'ok').length;
+    const ng = claims.filter((c) => c.done && c.verdict === 'ng').length;
+    return { ok, ng, na: 0 };
+  }
+
+  function showBand(claims, checking) {
+    band.hidden = false;
+    const n = counts(claims);
+    const pending = claims.some((c) => !c.done);
+    $('band-counts').innerHTML = pending && checking
+      ? '<span class="cnt na">確認中…</span>'
+      : `<span class="cnt ok">✔ ${n.ok}</span>&nbsp; <span class="cnt ng">✖ ${n.ng}</span>&nbsp; <span class="cnt na">？ ${n.na}</span>${pending ? ' <span class="cnt na">確認中…</span>' : ''}`;
+    $('b-fix').hidden = n.ng === 0;
+    $('b-open').hidden = pending && n.ng === 0 && n.ok === 0;
+    const ng = claims.find((c) => c.done && c.verdict === 'ng');
+    const s = SCENARIOS[sc].source;
+    $('band-line').innerHTML = ng
+      ? `<b>✖</b> 主張: ${esc(shortClaim(ng.text))}<br>&nbsp;&nbsp;&nbsp;原文 ${esc(s.kind === 'file' ? s.name : s.url)} L${ng.hit}: <span class="mono">${esc(s.lines[ng.hit - 1].trim())}</span>`
+      : (pending ? '出典の原文を読みに行っています' : '出典の原文と一致しました');
+  }
+
+  const shortClaim = (t) => t.replace(/（[^）]*）。?$/, '').replace(/。$/, '');
+
+  function attachHover(body, claims) {
+    if (!canHover) return;
+    const s = SCENARIOS[sc].source;
+    let card = null;
+    body.addEventListener('mouseenter', () => {
+      if (card) return;
+      const n = counts(claims);
+      const sorted = [...claims].sort((a, b) => (b.verdict === 'ng') - (a.verdict === 'ng'));
+      card = document.createElement('div'); card.className = 'hcard';
+      card.innerHTML = `<strong>🔍 ウラ取り ✔ ${n.ok}　✖ ${n.ng}　？ 0</strong>` + sorted.map((c) =>
+        `<div class="row"><span><span class="mk ${c.verdict}" style="margin:0 6px 0 0">${c.verdict === 'ng' ? '✖' : '✔'}</span>${esc(shortClaim(c.text))}</span>
+         <span class="src">▶ ${esc(s.kind === 'file' ? s.name : s.url)} L${c.hit}: ${esc(s.lines[c.hit - 1].trim())}</span></div>`).join('');
+      body.appendChild(card);
+    });
+    body.addEventListener('mouseleave', () => { if (card) { card.remove(); card = null; } });
+  }
+
+  function openPop(i) {
+    const list = [...current].sort((a, b) => (b.verdict === 'ng') - (a.verdict === 'ng'));
+    if (!list.length) return;
+    popIndex = Math.max(0, Math.min(i, list.length - 1));
+    const c = list[popIndex];
+    const s = SCENARIOS[sc].source;
+    const from = Math.max(1, c.hit - 2), to = Math.min(s.lines.length, c.hit + 1);
+    let rows = '';
+    for (let n = from; n <= to; n++) {
+      const hit = n === c.hit;
+      const text = s.lines[n - 1];
+      if (s.kind === 'web' && text === '') continue;
+      rows += s.kind === 'file'
+        ? `<div class="ln${hit ? ' hit' + (c.verdict === 'ok' ? ' okhit' : '') : ''}"><span class="arrow">${hit ? '▶' : ''}</span><span class="no">${n}</span><span>${esc(text)}</span></div>`
+        : `<div class="ln${hit ? ' hit' + (c.verdict === 'ok' ? ' okhit' : '') : ''}"><span class="arrow">${hit ? '▶' : ''}</span><span>${esc(text.replace(/^## /, ''))}</span></div>`;
+    }
+    const head = c.verdict === 'ng' ? '<span class="v ng">✖ 原文と食い違い</span>' : '<span class="v ok">✔ 原文と一致</span>';
+    const frag = encodeURIComponent(s.lines[c.hit - 1].slice(0, 16));
+    pop.innerHTML = `
+      <div class="pop-head" id="pop-title">${head}<span class="n">（${popIndex + 1}/${list.length}）</span></div>
+      <div><div class="lbl">Claude の主張</div><div class="claim">「${esc(shortClaim(c.text))}」</div></div>
+      <div class="srcline"><span class="lbl">${s.kind === 'file' ? '実際のファイル' : '実際のページ'}</span>　${esc(s.name)}</div>
+      <div class="excerpt${s.kind === 'web' ? ' web' : ''}">${rows}</div>
+      ${s.kind === 'web' ? `<button class="openlink" id="p-site">🔗 実際のサイトの該当箇所を開く（ハイライト表示）</button><div id="p-browser"></div>` : ''}
+      <div class="pop-btns">
+        ${c.verdict === 'ng' && phase !== 'done' ? '<button class="pbtn fix" id="p-fix">この主張を訂正させる</button>' : ''}
+        <button class="pbtn" id="p-prev" ${popIndex === 0 ? 'disabled' : ''}>← 前</button>
+        <button class="pbtn" id="p-next" ${popIndex === list.length - 1 ? 'disabled' : ''}>次 →</button>
+        <button class="pbtn" id="p-close">閉じる（Esc）</button>
+      </div>`;
+    pop.hidden = false;
+    if (phase === 'check') setPhase('pop');
+    $('p-prev').onclick = () => openPop(popIndex - 1);
+    $('p-next').onclick = () => openPop(popIndex + 1);
+    $('p-close').onclick = closePop;
+    if ($('p-fix')) $('p-fix').onclick = fix;
+    if ($('p-site')) $('p-site').onclick = () => {
+      const line = s.lines[c.hit - 1];
+      $('p-browser').innerHTML = `<div class="browser"><div class="addr">${esc(s.url)}#:~:text=${frag}</div><div class="pg">
+        ${s.lines.filter((l) => l !== '').map((l) => l.startsWith('## ') ? `<h4>${esc(l.slice(3))}</h4>` : `<p style="margin:0">${l === line ? `<mark>${esc(l)}</mark>` : esc(l)}</p>`).join('')}
+        </div></div><p class="foot" style="margin:6px 0 0">本物では、ブラウザで実際のページが開き、この文までスクロールしてハイライトされます。</p>`;
+      $('p-site').hidden = true;
+    };
+    $('p-close').focus({ preventScroll: true });
+  }
+
+  function closePop() { pop.hidden = true; }
+
+  async function start() {
+    const my = run;
+    const s = SCENARIOS[sc];
+    send.disabled = true;
+    mode.hidden = !/根拠/.test(s.question);
+    addMsg('user', esc(s.question));
+    q.value = '';
+    await wait(500);
+    const claims = s.claims.map((c) => ({ ...c, done: false }));
+    current = claims;
+    const res = await answer(s.lead, claims, my);
+    if (!res) return;
+    mode.hidden = true;
+    if (!(await check(res, claims, my))) return;
+    await wait(700);
+    if (my === run && claims.some((c) => c.verdict === 'ng')) openPop(0);
+  }
+
+  async function fix() {
+    if (phase === 'fix' || phase === 'done') return;
+    const my = run;
+    const s = SCENARIOS[sc];
+    closePop(); band.hidden = true;
+    setPhase('fix');
+    addMsg('system', esc(s.fixRequest));
+    await wait(700);
+    const claims = s.fixClaims.map((c) => ({ ...c, done: false }));
+    current = claims;
+    const res = await answer(s.fixLead, claims, my);
+    if (!res) return;
+    if (!(await check(res, claims, my))) return;
+    setPhase('done');
+    addMsg('system', 'デモはここまでです。［最初からやり直す］か、上のタブで別のシナリオを試せます。').closest('.msg').querySelector('.who').textContent = 'デモ';
+  }
+
+  send.addEventListener('click', start);
+  $('reset').addEventListener('click', reset);
+  $('b-open').addEventListener('click', () => openPop(0));
+  $('b-fix').addEventListener('click', fix);
+  $('b-close').addEventListener('click', () => { band.hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.hidden) closePop(); });
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => {
+    sc = t.dataset.sc;
+    document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+    reset();
+  }));
+
+  reset();
+})();
+</script>
+
+</body>
+</html>
